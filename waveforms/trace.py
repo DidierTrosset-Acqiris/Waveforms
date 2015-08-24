@@ -2,7 +2,7 @@
 
 from sys import stderr
 from numpy import int16, int32, array, zeros, resize
-from __init__ import Record, MultiRecord
+from . import Record, MultiRecord
 
 
 """
