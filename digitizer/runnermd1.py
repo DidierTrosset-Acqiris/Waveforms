@@ -15,7 +15,7 @@
 from AgMD1 import *
 from waveforms.trace import OutputTrace
 from waveforms import Record, MultiRecord
-from digitizer import DigitizerArgs
+from digitizer.argparser import DigitizerArgs
 from sys import stdout, stderr
 from time import sleep
 from signal import signal, SIGTERM, SIGINT
@@ -237,6 +237,10 @@ def Run( args ):
 
     # Close modules
     Close( vis )
+
+
+def main():
+    Run( DigitizerArgs() )
 
 
 if __name__=="__main__":

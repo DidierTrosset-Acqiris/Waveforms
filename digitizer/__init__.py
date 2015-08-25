@@ -1,3 +1,3 @@
 
-from argparser import DigitizerArgs, DigitizerParser
+from digitizer.argparser import DigitizerArgs, DigitizerParser
 
