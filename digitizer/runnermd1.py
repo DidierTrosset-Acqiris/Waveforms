@@ -78,7 +78,8 @@ def ApplyArgs( vis, args ):
         #AgMD1_SetAttributeViString( vi, "Channel1", AGMD1_ATTR_TIME_INTERLEAVED_CHANNEL_LIST, "Channel2" )
 
         # Manages sample rate: set to the max, and then adjust if required
-        AgMD1_SetAttributeViReal64(  vi, "", AGMD1_ATTR_SAMPLE_RATE, 1e10 )
+        try: AgMD1_SetAttributeViReal64(  vi, "", AGMD1_ATTR_SAMPLE_RATE, 1e10 )
+        except: pass
         if args.sampling_frequency:
             AgMD1_SetAttributeViReal64(  vi, "", AGMD1_ATTR_SAMPLE_RATE, args.sampling_frequency )   
         AgMD1_SetAttributeViInt64(  vi, "", AGMD1_ATTR_RECORD_SIZE, args.samples )
