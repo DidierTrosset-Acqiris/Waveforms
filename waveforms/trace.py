@@ -22,17 +22,17 @@ for rec in ReadTrace( sys.stdin ):
 class TraceHandler:
 
     def __init__(self):
-        self.keep_char = None 
+        self.keep_line = None 
         self.is_valid = False
         pass
 
-    def SetKeepChar( self, ch ):
-        self.keep_char = ch
+    def SetKeepLine( self, line ):
+        self.keep_line = line
 
-    def GetKeepChar( self ):
-        ch = self.keep_char
-        self.keep_char = None
-        return ch
+    def GetKeepLine( self ):
+        line = self.keep_line
+        self.keep_line = None
+        return line
 
     def trcBegin(self):
         self.Waves = None
@@ -104,29 +104,32 @@ def ParseTrace( input, handler ):
     EOF = True
     FS = chr(28)
     handler.trcBegin()
+
     isInSamples = False
     while True:
-        if handler.keep_char:
-            ch = handler.GetKeepChar()
+        # Get the next line
+        if handler.keep_line:
+            line = handler.GetKeepLine()
         else:
-            ch = input.read(1)
+            line = input.readline()
 
-        if ch == "":
+        # Handles EOF
+        if line=="":
             EOF = True
             break
-        if ch == "$" and isInSamples:
-            handler.SetKeepChar( "$" )
+
+        # Handles end of record with start of new one
+        if line[0]=="$" and isInSamples:
+            handler.SetKeepLine( line )
             EOF = False
             break
-        if ch == "\n":
-            continue
-        if ch == FS:
-            continue
-        line = ch + input.readline()
+
+        # Handles empty lines
         line = line.strip()
-        if line == "":
-            EOF = True
-            break
+        if line=="" or line[0]==FS:
+            continue
+
+        # Interpret the line
         if line[0] == "$":
             line = line[1:]
             key, value = line.split( None, maxsplit=1 )
@@ -134,6 +137,7 @@ def ParseTrace( input, handler ):
         else:
             isInSamples = True
             handler.trcSamples( line )
+            
     handler.trcEnd(cont = not EOF)
     return not EOF
 

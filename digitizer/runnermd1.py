@@ -53,6 +53,9 @@ def ShowInfo( vis ):
     if isinstance( vis, int ):
         vis = [vis]
     for vi in vis:
+        print( "Driver:  ", AgMD1_GetAttributeViString( vi, "", AGMD1_ATTR_SPECIFIC_DRIVER_REVISION, 256 ), file=stderr )
+        print( "AqDrv:   ", AgMD1_GetAttributeViString( vi, "", AGMD1_ATTR_INSTRUMENT_INFO_AQ_DRV_VERSION, 256 ), file=stderr )
+        print( "IOLS:    ", AgMD1_GetAttributeViString( vi, "", AGMD1_ATTR_INSTRUMENT_INFO_AQIO_VERSION, 256 ), file=stderr )
         print( "Model:   ", AgMD1_GetAttributeViString( vi, "", AGMD1_ATTR_INSTRUMENT_MODEL, 256 ), file=stderr )
         print( "Serial:  ", AgMD1_GetAttributeViString( vi, "", AGMD1_ATTR_INSTRUMENT_INFO_SERIAL_NUMBER_STRING, 256 ), file=stderr )
         print( "Options: ", AgMD1_GetAttributeViString( vi, "", AGMD1_ATTR_INSTRUMENT_INFO_OPTIONS, 256 ), file=stderr )
