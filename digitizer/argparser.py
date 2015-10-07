@@ -40,7 +40,7 @@ class DigitizerParser( ArgumentParser ):
         grps.add_argument( "--sampling-frequency", "-sf",  nargs=None, type=float )
 
         grps = self.add_mutually_exclusive_group()
-        grps.add_argument( "--trigger-internal", "-ti",    nargs=None, type=int,   default=None )
+        grps.add_argument( "--trigger-internal", "-ti",    nargs=None, type=int,   default=1 )
         grps.add_argument( "--trigger-external", "-te",    nargs=None, type=int,   default=None )
         self.add_argument( "--trigger-level", "-tl",       nargs=None, type=float, default=None )
         self.add_argument( "--trigger-delay", "-td",       nargs=None, type=float, default=None )
@@ -53,6 +53,9 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--read-samples", "-rs",        nargs=None, type=int,   default=None )
         self.add_argument( "--read-type", "-rt",           nargs=None, type=str,   default=None, choices=['int8', 'int16', 'real64'] )
         self.add_argument( "--read-channels", "-rc",       nargs='*',  type=int,   default=[1] )
+
+        grps = self.add_mutually_exclusive_group()
+        grps.add_argument( "--calibration-signal", "-cs",              type=str  , default=None, choices=['T0', '100MHz', 'InterleavingDelay'] )
 
 
 def DigitizerArgs( parser=None ):

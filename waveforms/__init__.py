@@ -112,7 +112,7 @@ class Record():
     >>> r.append( ( samples, 32, 0, -3e-11, 0.0, 2e-3, 6.25e-10, 1.0, 0.0 ) )
     Traceback (most recent call last):
     ...
-    RuntimeError: InitialXOffset do not match.
+    RuntimeError: InitialXOffset do not match. -7e-11 -3e-11
     >>> r.append( ( samples, 32, 0, -7e-11, 1.0, 2e-3, 6.25e-10, 1.0, 0.0 ) )
     Traceback (most recent call last):
     ...
@@ -130,7 +130,8 @@ class Record():
       -8403 -11933 -13571 -13213 -10755  -6573  -1427   4019   8701  12067
       13581  12979  10429   6195   1053  -4333  -9011 -12349 -13667 -12941
      -10179  -5757]
-
+    >>> print( r.FullScale )
+    65536
     """
     def __init__( self, fetch=None ):
         self.wfms = []
@@ -151,7 +152,7 @@ class Record():
         if len( self.wfms )>0 and self.wfms[0].ActualPoints != wfm.ActualPoints:
             raise RuntimeError( "ActualPoints do not match." )
         if len( self.wfms )>0 and self.wfms[0].InitialXOffset != wfm.InitialXOffset:
-            raise RuntimeError( "InitialXOffset do not match." )
+            raise RuntimeError( "InitialXOffset do not match. "+str( self.wfms[0].InitialXOffset )+" "+str( wfm.InitialXOffset ) )
         if len( self.wfms )>0 and self.wfms[0].InitialXTimeSeconds != wfm.InitialXTimeSeconds:
             raise RuntimeError( "InitialXTimeSeconds do not match." )
         if len( self.wfms )>0 and self.wfms[0].InitialXTimeFraction != wfm.InitialXTimeFraction:
@@ -179,6 +180,10 @@ class Record():
     @property
     def XIncrement( self ):
         return self.wfms[0].XIncrement
+
+    @property
+    def FullScale( self ):
+        return 2**16 if self.wfms[0][0].dtype==int16 else 2**8
 
 
 class _MultiWaveform():
@@ -380,7 +385,11 @@ class MultiRecord():
     def __init__( self, fetch=None ):
         self.mwfms = []
         if fetch:
-            self.append( fetch )
+            if isinstance( fetch, list ):
+                for f in fetch:
+                    self.append( f )
+            else:
+                self.append( fetch )
 
     def __len__( self ):
         return self.NumRecords
@@ -393,10 +402,26 @@ class MultiRecord():
         return self.mwfms[0].NumRecords
 
     def append( self, fetch ):
-        wfm = _MultiWaveform( fetch )
-        if len( self.mwfms )>0 and self.mwfms[0].NumRecords != wfm.NumRecords:
+        mwfm = _MultiWaveform( fetch )
+        if len( self.mwfms )>0 and self.mwfms[0].NumRecords != mwfm.NumRecords:
             raise RuntimeError( "NumRecords do not match." )
-        self.mwfms.append( wfm )
+        if len( self.mwfms )>0:
+            for r in range( mwfm.NumRecords ):
+                if self.mwfms[0].ActualPoints[r] != mwfm.ActualPoints[r]:
+                    raise RuntimeError( "ActualPoints do not match." )
+                if self.mwfms[0].InitialXOffset[r] != mwfm.InitialXOffset[r]:
+                    raise RuntimeError( "InitialXOffset do not match." )
+                if self.mwfms[0].InitialXTimeSeconds[r] != mwfm.InitialXTimeSeconds[r]:
+                    raise RuntimeError( "InitialXTimeSeconds do not match." )
+                if self.mwfms[0].InitialXTimeFraction[r] != mwfm.InitialXTimeFraction[r]:
+                    raise RuntimeError( "InitialXTimeFraction do not match." )
+            if self.mwfms[0].XIncrement != mwfm.XIncrement:
+                raise RuntimeError( "XIncrement do not match." )
+        self.mwfms.append( mwfm )
+
+    @property
+    def XIncrement( self ):
+        return self.mwfms[0].XIncrement
 
 
 

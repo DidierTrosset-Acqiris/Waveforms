@@ -2,7 +2,7 @@
 
 from sys import stderr
 from numpy import int16, int32, array, zeros, resize
-from . import Record, MultiRecord
+from . import Record, MultiRecord, _SubRecord
 
 
 """
@@ -411,6 +411,8 @@ def OutputTrace( records, out ):
     """
 
     if isinstance( records, Record ):
+        records = [records]
+    if isinstance( records, _SubRecord ):
         records = [records]
     for rec in records:
         #out.write( "$#ADCS %d\n" % adcs )
