@@ -13,6 +13,7 @@ import sys
 import os
 import math
 import select
+import warnings
 
 # Try to import SciPy, disables calculations if not
 try:
@@ -25,7 +26,7 @@ except ImportError:
 
 import matplotlib
 matplotlib.use('TkAgg')   # Plot to TkInter
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 #USE_SCIPY = 0
@@ -40,15 +41,14 @@ def CalcFourier( record, nbrSamples ):
             record.spectrums.append( abs( fft( wfm.Samples[:nbrSamples:1] )/(nbrSamples/2) ) )
 
 class Ratios:
-
     def __init__(self):
-        None
+        pass
 
 def CalcRatios(trace, nbrHarmonics=6):
     if len( trace.spectrums )==0 or len( trace.spectrums[0] )==0:
         return None
     ratios = Ratios()
-    nbrFreq = len( trace.spectrums )
+    nbrFreq = len( trace.spectrums[0] )
     first = ( 0, 0.0 )
     second = ( 0, 0.0 )
     # Find the first and second higher frequencies
@@ -130,7 +130,7 @@ class FittedSine:
 
 
 def CalcZeroCross(samples):
-    levelMin, levelMax = min(samples), max(samples)
+    levelMin, levelMax = int( min(samples) ), int( max(samples) )
     levelMean, levelGain = (levelMin + levelMax) / 2, (levelMax - levelMin) / 2
     levelUp, levelDn = levelMean + levelGain * 0.1, levelMean - levelGain * 0.1
     level = 0
@@ -167,7 +167,7 @@ def CalcZeroCross(samples):
 
 
 def CalcSinFitGuess(samples):
-    levelMin, levelMax = min(samples), max(samples)
+    levelMin, levelMax = int( min(samples) ), int( max(samples) )
     levelMean, levelGain = (levelMin + levelMax) / 2, (levelMax - levelMin) / 2
     crossLst, phaseLst = CalcZeroCross(samples)
     if len(crossLst) < 2:
@@ -352,14 +352,16 @@ def GetTraceFromSource():
 def CalculateTrace(trace):
     global ShowSpectrum, ShowFittedSine
     # Calculate sine fit
-    if USE_SCIPY and ShowFittedSine:
+    if USE_SCIPY and ( ShowSpectrum or ShowFittedSine ):
         trace.fittedSine = CalcFittedSine(trace)
     # Draw FFT
     if ShowSpectrum:
-        #nbrSamples = CalcBestNbrSamples(trace, trace.fittedSine.all[OMEGA]/2./pi/trace.XIncrement)
-        trace.nbrFftSamples = trace.ActualPoints if trace.ActualPoints<32867 else 32768
+        try:
+            trace.nbrFftSamples = CalcBestNbrSamples(trace, trace.fittedSine.all[OMEGA]/2./pi/trace.XIncrement)
+        except:
+            trace.nbrFftSamples = trace.ActualPoints if trace.ActualPoints<32867 else 32768
         CalcFourier(trace, trace.nbrFftSamples)
-    if ShowFittedSine:
+    if ShowSpectrum or ShowFittedSine:
         trace.ratios = CalcRatios(trace, 1)
     else:
         trace.ratios = None
@@ -519,7 +521,6 @@ def ShowImages(trace):
                         lineMaxSignals[ch].set_ydata(maxSignals[ch])
                 if not linesSignals[ch]:
                     plotSignal.set_title('Signal (us)')
-                    plotSignal.set_xlabel('time (us)')
                     plotSignal.set_ylabel('magnitude')
                     plotSignal.grid( which='both', linestyle='-' )
                     timeFull = trace.XIncrement * trace.ActualPoints * 1e6
@@ -561,7 +562,6 @@ def ShowImages(trace):
                 try: lineSpectrum, = plotSpectrum.plot(freq, spec, color='#0085d5')
                 except: pass
                 plotSpectrum.set_title('Spectrum (MHz)')
-                plotSpectrum.set_xlabel('frequency MHz')
                 plotSpectrum.set_ylabel('dBFS')
                 plotSpectrum.get_xaxis().axes.set_xlim(0, freqHalf)
                 plotSpectrum.get_yaxis().axes.set_ylim(-120, 0)
@@ -730,11 +730,13 @@ def StartMicroView():
                 plotMaxSignal = None
 
             plotSignal.set_title('Signal (us)')
-            plotSignal.set_xlabel('time (us)')
             plotSignal.set_ylabel('magnitude')
             plotSignal.grid( which='both', linestyle='-' )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                figSignal.tight_layout()
 
-            tkSignal = FigureCanvasTkAgg(figSignal, master=tkMain)
+            tkSignal = FigureCanvas(figSignal, master=tkMain)
             tkSignal.get_tk_widget().pack(side=TOP, fill=BOTH, expand=1)
 
         if ShowSpectrum:
@@ -746,10 +748,12 @@ def StartMicroView():
             lineMaxSpectrum = None
 
             plotSpectrum.set_title('Spectrum (MHz)')
-            plotSpectrum.set_xlabel('frequency (MHz)')
             plotSpectrum.set_ylabel('dBFS')
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                figSpectrum.tight_layout()
 
-            tkSpectrum = FigureCanvasTkAgg(figSpectrum, master=tkMain)
+            tkSpectrum = FigureCanvas(figSpectrum, master=tkMain)
             tkSpectrum.get_tk_widget().pack(side=TOP, fill=BOTH, expand=1)
 
         tkMain.pack()
