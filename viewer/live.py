@@ -650,7 +650,7 @@ def RunNext():
         Update()
 
 
-def StartMicroView():
+def main():
     global ShowSignal, ShowSpectrum, ShowFittedSine
     global Pause, RunCommand, InputFile, TcpPort, TcpBind, TcpHost
 
@@ -677,7 +677,7 @@ def StartMicroView():
     InputFile = args.inputs[0] if len( args.inputs )>0 else None
     RunCommand = " ".join( args.run ) if args.run else None
     TcpHost = args.tcp
-    TcpBind = args.bind
+    TcpBind = args.bind if args.bind else ""
     TcpPort = args.listen
     ShowSignal = args.signal if args.spectrum else True
     ShowSpectrum = args.spectrum
@@ -803,5 +803,5 @@ def StartMicroView():
 if __name__ == '__main__':
     #import profile
     #profile.run('StartMicroView()', 'live.prof')
-    StartMicroView()
+    main()
 
