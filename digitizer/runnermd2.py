@@ -150,6 +150,7 @@ def Acquire( vis, args ):
 
 
 def FetchChannels( vis, args ):
+    global _Continue
     if isinstance( vis, int ):
         vis = [vis]
     for vi in vis:
@@ -170,7 +171,11 @@ def FetchChannels( vis, args ):
             for ch in args.read_channels:
                 rec.append( Fetch( vi, "Channel%d"%( ch ), nbrSamplesToRead ) )
 
-            OutputTrace( rec, stdout )
+            try:
+                OutputTrace( rec, stdout )
+            except BrokenPipeError:
+                _Continue = False
+                break
 
         else:
             if args.read_type=='int16':
@@ -188,7 +193,11 @@ def FetchChannels( vis, args ):
             for ch in args.read_channels:
                 mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
 
-            OutputTrace( mrec, stdout )
+            try:
+                OutputTrace( mrec, stdout )
+            except BrokenPipeError:
+                _Continue = False
+                break
 
 
 class Runner():
@@ -204,19 +213,20 @@ class Runner():
         Run( self.args )
 
 
-def ArgsUpdated( args, queue ):
-        updated = False
-        while not queue.empty():
-            commands = queue.get_nowait()
-            for attribute, value in commands.items():
-                try:
-                    oldvalue = getattr( args, attribute )
-                    print( "Setting parameter", attribute, value, file=stderr )
-                    setattr( args, attribute, value )
-                except AttributeError as e:
-                    print( "Unknown parameter", attribute, file=stderr )
-            updated = True
-        return updated
+def UpdateArgs( args, queue ):
+    hasChanged = False
+    while not queue.empty():
+        commands = queue.get_nowait()
+        for attribute, value in commands.items():
+            try:
+                oldvalue = getattr( args, attribute )
+                print( "Setting parameter", attribute, value, file=stderr )
+                setattr( args, attribute, value )
+                if oldvalue!=value:
+                    hasChanged = True
+            except AttributeError as e:
+                print( "Unknown parameter", attribute, file=stderr )
+    return hasChanged
 
 
 _Continue = True
@@ -242,7 +252,7 @@ def Run( args, queue ):
     loop = 0
     while _Continue:
 
-        if ArgsUpdated( args, queue ):
+        if UpdateArgs( args, queue ):
             ApplyArgs( vis, args )
             
         Calibrate( vis, args, loop )
@@ -283,12 +293,9 @@ def ReadCommands( ins, queue ):
 
 def main():
     queue = Queue()
-    cmdthread = Thread( target=ReadCommands, args=( stdin, queue ) )
+    cmdthread = Thread( target=ReadCommands, args=( stdin, queue ), daemon=True )
     cmdthread.start()
     Run( DigitizerArgs(), queue )
-    _Continue=False
-    stdin.close()
-    cmdthread.join()
 
 
 if __name__=="__main__":
