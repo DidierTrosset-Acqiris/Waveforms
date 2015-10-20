@@ -57,6 +57,12 @@ class DigitizerParser( ArgumentParser ):
         grps = self.add_mutually_exclusive_group()
         grps.add_argument( "--calibration-signal", "-cs",              type=str  , default=None, choices=['T0', '100MHz', 'InterleavingDelay'] )
 
+    def parse_args( self, *largs, **kwargs ):
+        args = ArgumentParser.parse_args( self, *largs, **kwargs )
+        args.initial_read_records = args.read_records if hasattr( args, "read_records" ) else None
+        args.initial_read_samples = args.read_samples if hasattr( args, "read_samples" ) else None
+        return args
+
 
 def DigitizerArgs( parser=None ):
     if not parser:
@@ -78,6 +84,12 @@ def DigitizerArgs( parser=None ):
 
     return args
 
+
+def RefreshArgs( args ):
+    if not args.initial_read_records:
+        args.read_records = args.records
+    if not args.initial_read_samples:
+        args.read_samples = args.samples
 
 
 if __name__ == "__main__":
