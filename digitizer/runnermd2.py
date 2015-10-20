@@ -15,7 +15,7 @@
 from AgMD2 import *
 from waveforms.trace import OutputTrace
 from waveforms import Record, MultiRecord
-from digitizer.argparser import DigitizerArgs
+from digitizer.argparser import DigitizerArgs, RefreshArgs
 from sys import stdin, stdout, stderr
 from time import sleep
 from signal import signal, SIGTERM, SIGINT
@@ -226,6 +226,8 @@ def UpdateArgs( args, queue ):
                     hasChanged = True
             except AttributeError as e:
                 print( "Unknown parameter", attribute, file=stderr )
+    if hasChanged:
+        RefreshArgs( args )
     return hasChanged
 
 
