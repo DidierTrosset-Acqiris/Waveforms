@@ -8,6 +8,8 @@ except:
 from subprocess import *
 
 from waveforms.trace import ReadTrace
+from threading import Thread
+from queue import Queue
 import socket
 import sys
 import os
@@ -411,7 +413,7 @@ def _GetColor(index, light=False):
 
 def ShowImages(trace):
     global ShowSignal, ShowSpectrum, ShowFittedSine
-    global tkHeader, tkSignal, plotSignal, linesSignals, plotMinSignal, lineMinSignals, minSignals, plotMaxSignal, lineMaxSignals, maxSignals, tkSpectrum, plotSpectrum, lineSpectrum, plotMaxSpectrum, lineMaxSpectrum, specMax, spectrumReset
+    global tkHeader, tkSignal, plotSignal, figSignal, linesSignals, plotMinSignal, lineMinSignals, minSignals, plotMaxSignal, lineMaxSignals, maxSignals, tkSpectrum, plotSpectrum, lineSpectrum, plotMaxSpectrum, lineMaxSpectrum, specMax, spectrumReset
     tkHeader.itemconfigure("NAME", text="Name: %s" % (trace.filename))
     if len( trace )==0 or len( trace[0] )==0:
         return
@@ -524,6 +526,7 @@ def ShowImages(trace):
                     plotSignal.set_ylabel('magnitude')
                     plotSignal.grid( which='both', linestyle='-' )
                     timeFull = trace.XIncrement * trace.ActualPoints * 1e6
+                    sys.stderr.write( "TRACE %d\n"%trace.ActualPoints )
                     time = linspace(0.0, timeFull - (timeFull / trace.ActualPoints), trace.ActualPoints)
                     time = time + trace.InitialXOffset * 1e6
                     linesSignals[ch], = plotSignal.plot(time, wfm, color=_GetColor(ch), marker=marker)
@@ -545,20 +548,15 @@ def ShowImages(trace):
             tkSignal.draw()
         if ShowSpectrum:
             spec = 20.0 * log10(trace.spectrums[0][0:trace.ActualPoints // 2 + 1] / (trace.FullScale / 2))
-            if not lineMaxSpectrum or len(lineMaxSpectrum.get_xdata()) != len(specMax):
-                specMax = spec
+            if spectrumReset or not lineSpectrum or len(lineSpectrum.get_xdata()) != len(spec):
+                plotSpectrum.clear()
+                lineSpectrum = None
+                lineMaxSpectrum = None
                 freqHalf = 0.5 / trace.XIncrement / 1e6
                 freq = linspace(0.0, freqHalf, len(spec))
+                specMax = spec
                 try: lineMaxSpectrum, = plotMaxSpectrum.plot(freq, specMax, color='#9cdbd8')
                 except: pass
-            elif spectrumReset:
-                specMax = spec
-            else:
-                specMax = maximum(spec, specMax)
-                lineMaxSpectrum.set_ydata(specMax)
-            if not lineSpectrum or len(lineSpectrum.get_xdata()) != len(spec):
-                freqHalf = 0.5 / trace.XIncrement / 1e6
-                freq = linspace(0.0, freqHalf, len(spec))
                 try: lineSpectrum, = plotSpectrum.plot(freq, spec, color='#0085d5')
                 except: pass
                 plotSpectrum.set_title('Spectrum (MHz)')
@@ -567,6 +565,8 @@ def ShowImages(trace):
                 plotSpectrum.get_yaxis().axes.set_ylim(-120, 0)
             else:
                 lineSpectrum.set_ydata(spec)
+                specMax = maximum(spec, specMax)
+                lineMaxSpectrum.set_ydata(specMax)
             tkSpectrum.draw()
         if spectrumReset:
             spectrumReset = False
@@ -618,14 +618,26 @@ tkMain = None
 Pause = False
 Force = True
 
+def ReadInput( queue ):
+    for trace in GetTraceFromSource():
+        while not queue.empty():
+            queue.get_nowait()
+        queue.put( trace )
+
+
 def Update():
+    global queue
+    global Pause, Force
     if Pause and not Force:
         return
+    if queue.empty() and not Pause:
+        tkMain.after(20, Update)
+        return
     Force = False
-    for trace in GetTraceFromSource():
+    if not queue.empty():
+        trace = queue.get_nowait()
         CalculateTrace(trace)
         ShowImages(trace)
-        break
     if not Pause:
         tkMain.after(0, Update)
 
@@ -653,6 +665,7 @@ def RunNext():
 def main():
     global ShowSignal, ShowSpectrum, ShowFittedSine
     global Pause, RunCommand, InputFile, TcpPort, TcpBind, TcpHost
+    global queue
 
     from argparse import ArgumentParser
     parser = ArgumentParser( "MicroView" )
@@ -684,7 +697,7 @@ def main():
     ShowFittedSine = args.fitted_sine
         
 
-    global tkMain, tkHeader, tkSignal, plotSignal, linesSignals, plotMinSignal, lineMinSignals, minSignals, plotMaxSignal, lineMaxSignals, maxSignals, tkSpectrum, plotSpectrum, lineSpectrum, plotMaxSpectrum, lineMaxSpectrum, specMax, tkFitted
+    global tkMain, tkHeader, tkSignal, figSignal, plotSignal, linesSignals, plotMinSignal, lineMinSignals, minSignals, plotMaxSignal, lineMaxSignals, maxSignals, tkSpectrum, plotSpectrum, lineSpectrum, plotMaxSpectrum, lineMaxSpectrum, specMax, tkFitted
 
     tkMain = Frame(name="main")
     tkMain.pack(fill=BOTH, expand=1)
@@ -795,13 +808,17 @@ def main():
         tkClear.pack(side=LEFT)
 
 
-    tkMain.after(0, Update)
+    queue = Queue()
+    cmdthread = Thread( target=ReadInput, args=( queue, ), daemon=True )
+    cmdthread.start()
+
+    tkMain.after(20, Update)
 
     tkMain.mainloop()
 
 
 if __name__ == '__main__':
-    #import profile
-    #profile.run('StartMicroView()', 'live.prof')
-    main()
+    import cProfile
+    cProfile.run( 'main()', 'live.prof' )
+    #main()
 
