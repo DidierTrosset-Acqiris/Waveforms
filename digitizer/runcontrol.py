@@ -7,29 +7,60 @@ from sys import stdout
 import json
 
 
+def Scale125():
+    for power in range( 12 ):
+        for mantissa in [1, 2, 5]:
+            yield mantissa*( 10**power )
+
+
 class EntryWithSpins( ttk.Frame ):
 
-    def _DnValue( self ):
+    def _DnValuePM( self ):
         self.textvariable.set( str( int( self.textvariable.get() )-1 ) )
 
-    def _UpValue( self ):
+    def _UpValuePM( self ):
         self.textvariable.set( str( int( self.textvariable.get() )+1 ) )
+
+    def _DnValue125( self ):
+        value = int( self.textvariable.get() )
+        previousScale = 1
+        for scale in Scale125():
+            if scale<value:
+                previousScale = scale
+                continue
+            self.textvariable.set( str( previousScale ) )
+            return
+
+    def _UpValue125( self ):
+        value = int( self.textvariable.get() )
+        for scale in Scale125():
+            if scale>value:
+                self.textvariable.set( str( scale ) )
+                return
 
     def __init__( self, parent, textvariable, *args, **kwargs ):
         ttk.Frame.__init__( self, parent )
         self.textvariable = textvariable
-        self.text = ttk.Entry( self, textvariable=textvariable, *args, **kwargs )
-        self.spup = ttk.Button( self, text="up", command=self._UpValue)
-        self.spdn = ttk.Button( self, text="dn", command=self._DnValue)
-        self.spup.pack(side="right", fill="y")
-        self.spdn.pack(side="right", fill="y")
-        self.text.pack(side="left", fill="both", expand=True)
+        if "mode" in kwargs and kwargs["mode"]=="125":
+            del kwargs["mode"]
+            _DnValue = self._DnValue125
+            _UpValue = self._UpValue125
+        else:
+            _DnValue = self._DnValuePM
+            _UpValue = self._UpValuePM
+        self.spdn = ttk.Button( self, text="-", width=1, command=_DnValue)
+        self.text = ttk.Entry( self, justify="right", textvariable=textvariable, *args, **kwargs )
+        self.spup = ttk.Button( self, text="+", width=1, command=_UpValue)
+        self.spdn.pack( side="left", fill="y",    expand=False )
+        self.text.pack( side="left", fill="both", expand=True  )
+        self.spup.pack( side="left", fill="y",    expand=False )
 
         # expose some text methods as methods on this object
         self.insert = self.text.insert
         self.delete = self.text.delete
         self.get = self.text.get
         self.index = self.text.index
+
 
 def Apply(*args):
     try:
@@ -52,19 +83,21 @@ mainframe.rowconfigure( 0, weight=1 )
 
 records_var = StringVar()
 records_var.set( "1" )
+records_var.trace( "w", Apply )
 samples_var = StringVar()
 samples_var.set( "200" )
+samples_var.trace( "w", Apply )
 
-records_entry = ttk.Entry( mainframe, width=7, textvariable=records_var )
-records_entry.grid( column=2, row=1, sticky=( W, E ) )
+records_entry = EntryWithSpins( mainframe, width=8, textvariable=records_var )
+records_entry.grid( column=1, row=1, sticky=( W, E ) )
 
-samples_entry = EntryWithSpins( mainframe, width=7, textvariable=samples_var )
-samples_entry.grid( column=2, row=2, sticky=( W, E ) )
+samples_entry = EntryWithSpins( mainframe, width=12, mode="125", textvariable=samples_var )
+samples_entry.grid( column=1, row=2, sticky=( W, E ) )
 
-ttk.Button( mainframe, text="Apply", command=Apply ).grid( column=3, row=3, sticky=W )
+ttk.Label( mainframe, text="Records" ).grid( column=0, row=1, sticky=W )
+ttk.Label( mainframe, text="Samples" ).grid( column=0, row=2, sticky=E )
 
-ttk.Label( mainframe, text="Records" ).grid( column=1, row=1, sticky=W )
-ttk.Label( mainframe, text="Samples" ).grid( column=1, row=2, sticky=E )
+ttk.Button( mainframe, text="Apply", command=Apply ).grid( column=0, columnspan=2, row=3, sticky=E )
 
 for child in mainframe.winfo_children():
     child.grid_configure( padx=5, pady=5 )
