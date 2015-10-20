@@ -526,7 +526,6 @@ def ShowImages(trace):
                     plotSignal.set_ylabel('magnitude')
                     plotSignal.grid( which='both', linestyle='-' )
                     timeFull = trace.XIncrement * trace.ActualPoints * 1e6
-                    sys.stderr.write( "TRACE %d\n"%trace.ActualPoints )
                     time = linspace(0.0, timeFull - (timeFull / trace.ActualPoints), trace.ActualPoints)
                     time = time + trace.InitialXOffset * 1e6
                     linesSignals[ch], = plotSignal.plot(time, wfm, color=_GetColor(ch), marker=marker)
@@ -643,12 +642,14 @@ def Update():
 
 
 def PauseText():
+    global Pause
     if Pause:
         return "Unpause"
     return "Pause"
 
 
 def RunPause():
+    global Pause
     Pause = not Pause
     if not Pause:
         Update()

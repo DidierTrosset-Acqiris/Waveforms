@@ -220,9 +220,9 @@ def UpdateArgs( args, queue ):
         for attribute, value in commands.items():
             try:
                 oldvalue = getattr( args, attribute )
-                print( "Setting parameter", attribute, value, file=stderr )
                 setattr( args, attribute, value )
                 if oldvalue!=value:
+                    print( "Setting parameter", attribute, value, file=stderr )
                     hasChanged = True
             except AttributeError as e:
                 print( "Unknown parameter", attribute, file=stderr )
