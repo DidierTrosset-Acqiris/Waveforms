@@ -354,16 +354,16 @@ def GetTraceFromSource():
 def CalculateTrace(trace):
     global ShowSpectrum, ShowFittedSine
     # Calculate sine fit
-    if USE_SCIPY and ( ShowSpectrum or ShowFittedSine ):
+    if USE_SCIPY:
         trace.fittedSine = CalcFittedSine(trace)
-    # Draw FFT
-    if ShowSpectrum:
-        try:
-            trace.nbrFftSamples = CalcBestNbrSamples(trace, trace.fittedSine.all[OMEGA]/2./pi/trace.XIncrement)
-        except:
-            trace.nbrFftSamples = trace.ActualPoints if trace.ActualPoints<32867 else 32768
-        CalcFourier(trace, trace.nbrFftSamples)
-    if ShowSpectrum or ShowFittedSine:
+    # Calculate FFT
+    try:
+        trace.nbrFftSamples = CalcBestNbrSamples(trace, trace.fittedSine.all[OMEGA]/2./pi/trace.XIncrement)
+    except:
+        trace.nbrFftSamples = trace.ActualPoints if trace.ActualPoints<32867 else 32768
+    CalcFourier(trace, trace.nbrFftSamples)
+    # Calculate ratios
+    if ShowSignal or ShowSpectrum or ShowFittedSine:
         trace.ratios = CalcRatios(trace, 1)
     else:
         trace.ratios = None
