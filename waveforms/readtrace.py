@@ -11,14 +11,15 @@ from argparse import ArgumentParser
 def main():
     parser = ArgumentParser()
     parser.add_argument( "--record-start",  "-rs",  type=int,   default=0   )
-    parser.add_argument( "--record-count",  "-rc",  type=int,   default=1000000   )
+    parser.add_argument( "--record-count",  "-rc",  type=int,   default=-1   )
+    parser.add_argument( "--sample-start",  "-ss",  type=int,   default=0   )
+    parser.add_argument( "--sample-count",  "-sc",  type=int,   default=-1   )
+    parser.add_argument( "--channels",      "-c",   type=int,   default=None,   nargs="*" )
     parser.add_argument( "--output",        "-o",   type=str )
     parser.add_argument( "files", nargs='*', type=str )
 
     args = parser.parse_args()
 
-
-    r_enumerate= lambda iterable: zip( reversed( range( len(iterable) ) ), reversed( iterable ) )
 
     if len( args.files )==0:
         traces = [stdin]
@@ -30,8 +31,8 @@ def main():
     riStart = args.record_start
     riCount = args.record_count
 
-    siStart = 0
-    siCount = 20
+    siStart = args.sample_start
+    siCount = args.sample_count
 
     ri = 0
     for trace in traces:
@@ -41,9 +42,17 @@ def main():
             if riCount>0 and ri>=riStart+riCount:
                 break
             rec2 = Record()
-            for c, wfm in r_enumerate( rec ):
-                rec2.append( (wfm.Samples[siStart:siStart+siCount],
-                              siCount,
+            for c, wfm in enumerate( rec ):
+                if args.channels and c+1 not in args.channels:
+                    continue
+                if siStart==0 and  siCount<0:
+                    samples = wfm.Samples
+                elif siCount<0:
+                    samples = wfm.Samples[siStart:]
+                else:
+                    samples = wfm.Samples[siStart:siStart+siCount]
+                rec2.append( (samples,
+                              len( samples ),
                               0,
                               wfm.InitialXOffset,
                               wfm.InitialXTimeSeconds,

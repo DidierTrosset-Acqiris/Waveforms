@@ -3,7 +3,7 @@
 
 from tkinter import *
 from tkinter import ttk
-from sys import stdout
+from sys import exit, stdout
 import json
 
 
@@ -12,17 +12,34 @@ NoModuleString = "No module found"
 
 def Choose(*args):
     try:
-        index = modlist.curselection()
-        rsrc = modlist.get( index )
-        if rsrc!=NoModuleString:
-            stdout.write( "%s\n"%( rsrc ) )
-            stdout.flush()
+        items = map( int, modlist.curselection() )
+        for index in items:
+            rsrc = modlist.get( index )
+            if rsrc!=NoModuleString:
+                stdout.write( "%s\n"%( rsrc ) )
+        stdout.flush()
         root.destroy()
     except TclError:
         pass
     except ValueError:
         pass
     
+
+from argparse import ArgumentParser
+parser = ArgumentParser( "Chooser" )
+parser.add_argument( "--multiple", "-m", action='store_true', default=None )
+parser.add_argument( "inputs", type=str, nargs="*" )
+
+args = parser.parse_args()
+
+if len( args.inputs )>0:
+    if args.multiple:
+        for i in args.inputs:
+            stdout.write( "%s\n"%( i ) )
+    else:
+        stdout.write( "%s\n"%( args.inputs[0] ) )
+    stdout.flush()
+    exit( 0 )
 
 root = Tk()
 root.title("Choose Module")
@@ -76,7 +93,10 @@ except:
 
 if len( modules )==0:
     modules.append( NoModuleString )
-modlist = Listbox( mainframe )
+selectmode = "single"
+if args.multiple:
+    selectmode = "multiple"
+modlist = Listbox( mainframe, selectmode=selectmode )
 for item in modules:
     modlist.insert( END, item )
 modlist.activate( 0 )

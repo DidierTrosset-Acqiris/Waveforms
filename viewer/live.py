@@ -13,6 +13,7 @@ from queue import Queue
 import socket
 import sys
 import os
+from os.path import expanduser
 import math
 import select
 import warnings
@@ -128,7 +129,7 @@ class FittedSine:
         self.all = [ 1., 1., 0., 0., 0. ]
         self.adc = []
         self.XIncrement = 0
-        self.fullscale = 0
+        self.FullScale = 0
 
 
 def CalcZeroCross(samples):
@@ -289,7 +290,6 @@ def GetTraceFromSource():
     if InputFile and InputFile != "-":
         filename = InputFile
         input = open(InputFile)
-        Pause = True
     elif TcpPort and TcpHost:
         filename = "TCP: %s : %s" % (TcpHost, TcpPort)
         if not ReadSocket:
@@ -345,8 +345,8 @@ def GetTraceFromSource():
         for rec in ReadTrace( input ):
             rec.filename = filename
             yield rec
-        if not TcpPort or TcpHost: # We are not listening
-            Pause = True
+#        if not TcpPort or TcpHost: # We are not listening
+#            Pause = True
     if SubProcess and SubProcess.poll() != None:
         SubProcess = None
 
@@ -355,7 +355,10 @@ def CalculateTrace(trace):
     global ShowSpectrum, ShowFittedSine
     # Calculate sine fit
     if USE_SCIPY:
-        trace.fittedSine = CalcFittedSine(trace)
+        try:
+            trace.fittedSine = CalcFittedSine(trace)
+        except:
+            trace.fittedSine = None
     # Calculate FFT
     try:
         trace.nbrFftSamples = CalcBestNbrSamples(trace, trace.fittedSine.all[OMEGA]/2./pi/trace.XIncrement)
@@ -364,7 +367,10 @@ def CalculateTrace(trace):
     CalcFourier(trace, trace.nbrFftSamples)
     # Calculate ratios
     if ShowSignal or ShowSpectrum or ShowFittedSine:
-        trace.ratios = CalcRatios(trace, 1)
+        try:
+            trace.ratios = CalcRatios(trace, 1)
+        except:
+            trace.ratios = None
     else:
         trace.ratios = None
     return trace
@@ -382,26 +388,12 @@ class Mismatch:
         self.adc = []
 
 def _GetColor(index, light=False):
-    colorsNormal=[
-        '#E12B33', # Red
-        '#0085D5', # Blue
-        '#00A94F', # GrassGreen
-        '#B3214F', # Magenta
-        '#444444', # Black
-        '#3B2F63', # Violet
-        '#D96210', # Orange
-        '#917700', # DarkYellow
-    ]
-    colorsLight=[
-        '#F19BA3', # Red
-        '#80C5E5', # Blue
-        '#00D9AF', # GrassGreen
-        '#D3A1BF', # Magenta
-        '#B4B4B4', # Black
-        '#ABBFC3', # Violet
-        '#E9C290', # Orange
-        '#D1C780', # DarkYellow
-    ]
+    def _light( c ):
+        r, g, b = int( c[1:3], 16 ), int( c[3:5], 16 ), int( c[5:7], 16 )
+        return '#'+'%02x'%( 255-( 255-r )//2 )+'%02x'%( 255-( 255-g )//2 )+'%02x'%( 255-( 255-b )//2 )
+    #                Kt Red     Kt Blue    Kt Purple   Kt Green  Kt Orange  Kt MedGray Kt Yellow  Kt Black
+    colorsNormal = ['#e90029', '#009fe3', '#8b3c8f', '#019642', '#ed5e1a', '#9c9c9c', '#fdc206', '#000000']
+    colorsLight = [_light( c ) for c in colorsNormal]
     if light:
         colors = colorsLight
     else:
@@ -527,10 +519,9 @@ def ShowImages(trace):
                     plotSignal.grid( which='both', linestyle='-' )
                     timeFull = trace.XIncrement * trace.ActualPoints * 1e6
                     time = linspace(0.0, timeFull - (timeFull / trace.ActualPoints), trace.ActualPoints)
-                    time = time + trace.InitialXOffset * 1e6
-                    linesSignals[ch], = plotSignal.plot(time, wfm, color=_GetColor(ch), marker=marker)
+                    time = time + trace.InitialXOffset%trace.XIncrement * 1e6
+                    linesSignals[ch], = plotSignal.plot(time, wfm.Samples, color=_GetColor(ch), marker=marker)
                     plotSignal.get_xaxis().axes.set_xlim(0, timeFull - (timeFull / trace.ActualPoints))
-                    yscale = 65536
                     yscale = trace.FullScale
                     if True: # trace is signed:
                         ylim = (-yscale/2, yscale/2 - 1)
@@ -541,9 +532,9 @@ def ShowImages(trace):
                     if trace.InitialXOffset!=0.0:
                         timeFull = trace.XIncrement * trace.ActualPoints * 1e6
                         time = linspace(0.0, timeFull - (timeFull / trace.ActualPoints), trace.ActualPoints)
-                        time = time + trace.InitialXOffset * 1e6
+                        time = time + trace.InitialXOffset%trace.XIncrement * 1e6
                         linesSignals[ch].set_xdata(time)
-                    linesSignals[ch].set_ydata( wfm )
+                    linesSignals[ch].set_ydata( wfm.Samples )
             tkSignal.draw()
         if ShowSpectrum:
             spec = 20.0 * log10(trace.spectrums[0][0:trace.ActualPoints // 2 + 1] / (trace.FullScale / 2))
@@ -573,7 +564,7 @@ def ShowImages(trace):
     mismatch = Mismatch()
     if ShowFitteSine and trace.fittedSine:
         psine = trace.fittedSine.all
-        fullscale = max(1, trace.fittedSine.fullscale)
+        FullScale = max(1, trace.fittedSine.FullScale)
         sampival = max(1e-12, trace.fittedSine.XIncrement)
         frequency = psine[OMEGA] / 2.0 / pi / sampival
         delay = psine[PHASE] / 2.0 / pi / frequency
@@ -583,7 +574,7 @@ def ShowImages(trace):
         tkUpdateLabel(tkFitted.children["allgain"], '%7.0f LSB' % (psine[GAIN]))
         tkUpdateLabel(tkFitted.children["alloffset"], '%7.2f LSB' % (psine[OFFSET]))
         tkUpdateLabel(tkFitted.children["allrms"], '%7.3f LSB' % (psine[RMS]))
-        try: vallenob = "%5.2f" % (math.log(fullscale / (sqrt(12) * psine[RMS] )) / math.log(2.0))
+        try: vallenob = "%5.2f" % (math.log(FullScale / (sqrt(12) * psine[RMS] )) / math.log(2.0))
         except: vallenob = "#####"
         tkUpdateLabel(tkFitted.children["allenob"], '%s bits' % (vallenob))
         for adc in range(0, len(trace.fittedSine.adc)):
@@ -607,7 +598,7 @@ def ShowImages(trace):
             tkUpdateLabel(tkFitted.children["adc%dgain"%(adc)], '%7.0f LSB' % (psine[GAIN]))
             tkUpdateLabel(tkFitted.children["adc%doffset"%(adc)], '%7.2f LSB' % (psine[OFFSET]))
             tkUpdateLabel(tkFitted.children["adc%drms"%(adc)], '%7.3f LSB' % (psine[RMS]))
-            try: vadcenob = "%5.2f" % (math.log(fullscale / (sqrt(12) * psine[RMS] )) / math.log(2.0))
+            try: vadcenob = "%5.2f" % (math.log(FullScale / (sqrt(12) * psine[RMS] )) / math.log(2.0))
             except: vadcenob = "#####"
             tkUpdateLabel(tkFitted.children["adc%denob"%(adc)], '%s bits' % (vadcenob))
             mismatch.adc.append(  ((delayAdc - delayAdc0) * 1e12, (psine[GAIN] - gainAdc0) / gainAdc0 * 100, (psine[OFFSET] - offsetAdc0) / gainAdc0 * 100)  )
@@ -618,9 +609,11 @@ Pause = False
 Force = True
 
 def ReadInput( queue ):
+    global ShowLive
     for trace in GetTraceFromSource():
-        while not queue.empty():
-            queue.get_nowait()
+        if ShowLive:
+            while not queue.empty():
+                queue.get_nowait()
         queue.put( trace )
 
 
@@ -664,7 +657,7 @@ def RunNext():
 
 
 def main():
-    global ShowSignal, ShowSpectrum, ShowFittedSine
+    global ShowSignal, ShowSpectrum, ShowFittedSine, ShowLive
     global Pause, RunCommand, InputFile, TcpPort, TcpBind, TcpHost
     global queue
 
@@ -680,12 +673,14 @@ def main():
     parser.add_argument( "--listen", type=int, default=None )
     parser.add_argument( "--bind", type=str, default=None )
     parser.add_argument( "--min-max-signal", action='store_true', default=False )
+    parser.add_argument( "--live", action='store_true', default=False )
     parser.add_argument( "inputs", type=str, nargs="*" )
 
     args = parser.parse_args()
     args.width, args.height = map( int, args.size.split("x") )
 
     Pause = args.pause
+    ShowLive = args.live
     ImgWidth = args.width
     ImgHeight = args.height
     InputFile = args.inputs[0] if len( args.inputs )>0 else None
@@ -700,7 +695,13 @@ def main():
 
     global tkMain, tkHeader, tkSignal, figSignal, plotSignal, linesSignals, plotMinSignal, lineMinSignals, minSignals, plotMaxSignal, lineMaxSignals, maxSignals, tkSpectrum, plotSpectrum, lineSpectrum, plotMaxSpectrum, lineMaxSpectrum, specMax, tkFitted
 
-    tkMain = Frame(name="main")
+    tk = Tk()
+    with open( expanduser( "~/.viewer_live.cfg" ), "rt" ) as f:
+        line = f.readline()
+        geometry = re.match( r"geometry\s*=\s*(\S*)\s*", line ).group(1)
+        tk.geometry( geometry )
+
+    tkMain = Frame(tk, name="main")
     tkMain.pack(fill=BOTH, expand=1)
     tkMain.master.title("MicroViewer")
 
@@ -797,7 +798,6 @@ def main():
         tkMain.master.title("MicroViewer - " + InputFile)
         tkButton = Button(tkMain, text="Refresh", command=Update)
         tkButton.pack(side=BOTTOM)
-        Pause = True
     else:
         tkMain.tkPause = Button(tkMain, text=PauseText(), command=RunPause)
         tkMain.tkPause.pack(side=RIGHT)
@@ -815,7 +815,17 @@ def main():
 
     tkMain.after(20, Update)
 
+    def _OnWmDeleteWindow():
+        geom = tk.geometry()
+        with open( expanduser( "~/.viewer_live.cfg" ), "wt" ) as f:
+            f.write( "geometry="+geom+"\n" )
+        tk.destroy()
+
+
+    tk.protocol("WM_DELETE_WINDOW", _OnWmDeleteWindow)
+
     tkMain.mainloop()
+
 
 
 if __name__ == '__main__':

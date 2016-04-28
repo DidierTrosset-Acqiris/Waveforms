@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 from sys import stderr
-from numpy import int16, int32, array, zeros, resize
-from . import Record, MultiRecord, _SubRecord
+from numpy import int8, int16, int32, array, zeros, resize
+from waveforms import Record, MultiRecord, _SubRecord
 
 
 """
@@ -65,8 +65,8 @@ class TraceHandler:
         if strKey=='#CHANNELS':
             self.nbrRecords = int(strValue)
         if strKey=='FULLSCALE':
-            self.fullscale = int(strValue)
-            self.dtype = int32 if self.fullscale==4294967296 else int16
+            self.FullScale = int(strValue)
+            self.dtype = int32 if self.FullScale==2**32 else int16 if self.FullScale==2**16 else int8
         if strKey=='CHANNELFSR':
             self.channelfsr = float(strValue)
         if strKey=='SAMPIVAL' or strKey=='XIncrement':
@@ -296,7 +296,7 @@ def ReadTrace( f ):
                 InitialXTimeSeconds = 0.0
                 InitialXTimeFraction = 0.0
                 XIncrement = h.XIncrement
-                try:    ScaleFactor = h.channelfsr/h.fullscale
+                try:    ScaleFactor = h.channelfsr/h.FullScale
                 except: ScaleFactor = 1.0
                 ScaleOffset = 0.0
                 r = Record()
@@ -328,6 +328,7 @@ def OutputTrace( records, out ):
     $MODEL U5303A
     $SAMPIVAL 6.25e-10
     $HORPOS -7e-11
+    $SCALE 0 6.10352e-05
     -2243 8093
     3171 11667
     8093 13533
@@ -373,6 +374,7 @@ def OutputTrace( records, out ):
     $MODEL U5303A
     $SAMPIVAL 6.25e-10
     $HORPOS -7e-11
+    $SCALE 0 6.10352e-05
     -2243 3171
     3171 8093
     8093 11667
@@ -393,6 +395,7 @@ def OutputTrace( records, out ):
     $MODEL U5303A
     $SAMPIVAL 6.25e-10
     $HORPOS -3e-11
+    $SCALE 0 6.10352e-05
     -1427 4019
     4019 8701
     8701 12067
@@ -415,15 +418,17 @@ def OutputTrace( records, out ):
     if isinstance( records, _SubRecord ):
         records = [records]
     for rec in records:
+        fullscale = 2**32 if rec[0].Samples.dtype==int32 else 2**16 if rec[0].Samples.dtype==int16 else 2**8
         #out.write( "$#ADCS %d\n" % adcs )
         out.write( "$#CHANNELS %d\n" % len( rec ) )
         out.write( "$SIGNED %d\n" % 1 )
         out.write( "$FORMATTING DECIMAL\n" )
-        out.write( "$FULLSCALE %d\n" % 65536 )
+        out.write( "$FULLSCALE %d\n" %( fullscale ) )
         out.write( "$MODEL %s\n" % "U5303A" )
         out.write( "$SAMPIVAL %g\n" % rec.XIncrement )
         #out.write( "$CHANNELFSR -1\n" )
         out.write( "$HORPOS %g\n" % rec.InitialXOffset )
+        out.write( "$SCALE %g %g\n" %( rec.ScaleOffset, rec.ScaleFactor ) )
 
         for samples in zip( *rec ):
             out.write( " ".join( map( str, samples ) )+"\n" )

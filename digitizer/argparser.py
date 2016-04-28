@@ -14,10 +14,12 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "resources",                    nargs='+',  type=str )
 
         self.add_argument( "--reset",                                              default=False, action='store_true' )
+        self.add_argument( "--info-cores", "-ic",                                  default=False, action='store_true' )
 
         self.add_argument( "--loops", "-l",                            type=int,   default=-1 )
         self.add_argument( "--records", "-r",                          type=int,   default=1 )
         self.add_argument( "--samples", "-s",                          type=int,   default=200 )
+        self.add_argument( "--mode", "-m",                             type=str,   default='DGT', choices=['DGT', 'DDC'] )
 
         self.add_argument( "--no-calibrate", "-nc",                                default=False, action='store_true' )
         self.add_argument( "--calibrate-fast", "-cf",                              default=False, action='store_true' )
@@ -44,18 +46,27 @@ class DigitizerParser( ArgumentParser ):
         grps.add_argument( "--trigger-external", "-te",    nargs=None, type=int,   default=None )
         self.add_argument( "--trigger-level", "-tl",       nargs=None, type=float, default=None )
         self.add_argument( "--trigger-delay", "-td",       nargs=None, type=float, default=None )
+        self.add_argument( "--trigger-slope", "-ts",                   type=str,   default="p", choices=["positive", "p", "negative", "n"] )
+        self.add_argument( "--immediate-trigger", "-it",                           default=False, action='store_true' )
 
         grps = self.add_mutually_exclusive_group()
         grps.add_argument( "--wait-timeout", "-wt",        nargs='?',  type=float, default=1.0 )
         grps.add_argument( "--poll-timeout", "-pt",        nargs=None, type=float, default=None )
+        self.add_argument( "--wait-failure", "-wf",                                default=False, action='store_true' )
 
         self.add_argument( "--read-records", "-rr",        nargs=None, type=int,   default=None )
         self.add_argument( "--read-samples", "-rs",        nargs=None, type=int,   default=None )
         self.add_argument( "--read-type", "-rt",           nargs=None, type=str,   default=None, choices=['int8', 'int16', 'real64'] )
         self.add_argument( "--read-channels", "-rc",       nargs='*',  type=int,   default=[1] )
 
-        grps = self.add_mutually_exclusive_group()
-        grps.add_argument( "--calibration-signal", "-cs",              type=str  , default=None, choices=['T0', '100MHz', 'InterleavingDelay'] )
+        self.add_argument( "--vertical-range", "-vr",                  type=float, default=None )
+        self.add_argument( "--vertical-offset", "-vo",                 type=float, default=None )
+
+        self.add_argument( "--calibration-signal", "-cs",              type=str  , default=None, choices=['Gnd', 'T0', 'Cal100', '100MHz', 'InterleavingDelay'] )
+
+        self.add_argument( "--ddc-decimation-numerator", "-ddn",       type=int )
+        self.add_argument( "--ddc-decimation-denominator", "-ddd",     type=int )
+        self.add_argument( "--ddc-local-oscillator-frequency", "-ddf", type=float, default=0.0 )
 
     def parse_args( self, *largs, **kwargs ):
         args = ArgumentParser.parse_args( self, *largs, **kwargs )

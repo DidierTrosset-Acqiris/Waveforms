@@ -3,7 +3,7 @@
 """
     Runs continuous acquisitions
 
-    Copyright (C) Keysight Technologies 2015
+    Copyright (C) Keysight Technologies 2015-2016
    
     Started: August 24th, 2015
     By:      Didier Trosset
@@ -14,7 +14,7 @@
 
 from AgMD2 import *
 from waveforms.trace import OutputTrace
-from waveforms import Record, MultiRecord
+from waveforms import Record, MultiRecord, DDCMultiRecord
 from digitizer.argparser import DigitizerArgs, RefreshArgs
 from sys import stdin, stdout, stderr
 from time import sleep
@@ -24,19 +24,47 @@ from queue import Queue
 import json
 
 
-def Initialize( resources, options ):
+def Initialize( args, options ):
     """ Initializes all the given resources using AgMD2_InitWithOptions,
         using the given options string.
         @return the list of vi.
     """
+    reset = 1 if args.reset else 0
+    resources = args.resources
     if isinstance( resources, str ):
         resources = [resources]
     vis = []
     try:
         for rsrc in resources:
-            vis.append( AgMD2_InitWithOptions( rsrc, 0, 0, options ) )
+            Vi = AgMD2_InitWithOptions( rsrc, 0, reset, options )
+            vis.append( Vi )
             # Always set private access.
-            AgMD2_SetAttributeViString( vis[-1], "", AGMD2_ATTR_PRIVATE_ACCESS_PASSWORD, "We1ssh0rn" )
+            AgMD2_SetAttributeViString( Vi, "", AGMD2_ATTR_PRIVATE_ACCESS_PASSWORD, "We1ssh0rn" )
+            print( "Driver:  ", AgMD2_GetAttributeViString( Vi, "", AGMD2_ATTR_SPECIFIC_DRIVER_REVISION, 256 ), file=stderr )
+            print( "IOLS:    ", AgMD2_GetAttributeViString( Vi, "", AGMD2_ATTR_INSTRUMENT_INFO_IO_VERSION, 256 ), file=stderr )
+            print( "Model:   ", AgMD2_GetAttributeViString( Vi, "", AGMD2_ATTR_INSTRUMENT_MODEL, 256 ), file=stderr )
+            print( "Serial:  ", AgMD2_GetAttributeViString( Vi, "", AGMD2_ATTR_INSTRUMENT_INFO_SERIAL_NUMBER_STRING, 256 ), file=stderr )
+            print( "Options: ", AgMD2_GetAttributeViString( Vi, "", AGMD2_ATTR_INSTRUMENT_INFO_OPTIONS, 256 ), file=stderr )
+            print( "Firmware:", AgMD2_GetAttributeViString( Vi, "", AGMD2_ATTR_INSTRUMENT_FIRMWARE_REVISION, 256 ), file=stderr )
+            if args.info_cores:
+                def PrintCoreVersion( Vi, msg, core ):
+                    try:
+                        version, versionString = AgMD2_LogicDeviceGetCoreVersion ( Vi, "DpuA", core, 32 )
+                    except:
+                        return
+                    print( msg, versionString, file=stderr )
+                PrintCoreVersion( Vi, "Core PCIe:   ", AGMD2_VAL_LOGIC_DEVICE_CORE_PCIE )
+                PrintCoreVersion( Vi, "Core DDR3A:  ", AGMD2_VAL_LOGIC_DEVICE_CORE_DDR3A )
+                PrintCoreVersion( Vi, "Core DDR3B:  ", AGMD2_VAL_LOGIC_DEVICE_CORE_DDR3B )
+                PrintCoreVersion( Vi, "Core CalDig: ", AGMD2_VAL_LOGIC_DEVICE_CORE_CALIBRATION_DIGITIZER )
+                PrintCoreVersion( Vi, "Core IfdlUp: ", AGMD2_VAL_LOGIC_DEVICE_CORE_IFDL_UP )
+                PrintCoreVersion( Vi, "Core IfdlDn: ", AGMD2_VAL_LOGIC_DEVICE_CORE_IFDL_DOWN )
+                PrintCoreVersion( Vi, "Core IfdlCt: ", AGMD2_VAL_LOGIC_DEVICE_CORE_IFDL_CONTROL )
+                PrintCoreVersion( Vi, "Core QDR2:   ", AGMD2_VAL_LOGIC_DEVICE_CORE_QDR2 )
+                PrintCoreVersion( Vi, "Core AdcInt: ", AGMD2_VAL_LOGIC_DEVICE_CORE_ADC_INTERFACE )
+                PrintCoreVersion( Vi, "Core StrPr:  ", AGMD2_VAL_LOGIC_DEVICE_CORE_STREAM_PREPARE )
+                PrintCoreVersion( Vi, "Core TrgMgr: ", AGMD2_VAL_LOGIC_DEVICE_CORE_TRIGGER_MANAGER )
+
     except:
         for vi in vis:
             try: AgMD2_close( vi )
@@ -80,6 +108,15 @@ def ApplyArgs( vis, args ):
             elif args.clock_ref_axie:
                 AgMD2_SetAttributeViInt32(  vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_AXIE_CLK100 )
 
+        # Manages acquisition mode
+        if args.mode=='DDC':
+            AgMD2_SetAttributeViInt32( vi, "", AGMD2_ATTR_ACQUISITION_MODE, AGMD2_VAL_ACQUISITION_MODE_DIGITAL_DOWN_CONVERSION )
+            nbrDDCCores = AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_DDCCORE_COUNT )
+            for core in range( nbrDDCCores ):
+                ddcCore = "DDCCore%d"%( core+1 )
+                AgMD2_SetAttributeViInt64( vi, ddcCore, AGMD2_ATTR_DDCCORE_DECIMATION_NUMERATOR, args.ddc_decimation_numerator )
+                AgMD2_SetAttributeViInt64( vi, ddcCore, AGMD2_ATTR_DDCCORE_DECIMATION_DENOMINATOR, args.ddc_decimation_denominator )
+
         # Manages conbination
         if args.interleave:
             ch, sub = args.interleave[:2]
@@ -95,23 +132,41 @@ def ApplyArgs( vis, args ):
         assert args.records == AgMD2_GetAttributeViInt64(  vi, "", AGMD2_ATTR_NUM_RECORDS_TO_ACQUIRE )
 
         # Manages trigger
-        if args.trigger_external:
-            ActiveTrigger = "External%d"%( args.trigger_external )
-        elif args.trigger_internal:
-            ActiveTrigger = "Internal%d"%( args.trigger_internal )
+        if args.immediate_trigger:
+            ActiveTrigger = "Immediate"
         else:
-            ActiveTrigger = "Internal1"
+            if args.trigger_external:
+                ActiveTrigger = "External%d"%( args.trigger_external ) if args.trigger_external!=4 else "AXIe_SYNC"
+            elif args.trigger_internal:
+                ActiveTrigger = "Internal%d"%( args.trigger_internal )
+            else:
+                ActiveTrigger = "Internal1"
+
+            if args.trigger_level!=None:
+                AgMD2_SetAttributeViReal64( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_LEVEL, args.trigger_level )
+            if args.trigger_delay!=None:
+                AgMD2_SetAttributeViReal64( vi, "", AGMD2_ATTR_TRIGGER_DELAY, args.trigger_delay )
+                stderr.write( "==>td:%g\n"%AgMD2_GetAttributeViReal64( vi, "", AGMD2_ATTR_TRIGGER_DELAY ) )
+            if args.trigger_slope!=None:
+                if args.trigger_slope in ["negative", "n"]:
+                    AgMD2_SetAttributeViInt32( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_SLOPE, AGMD2_VAL_NEGATIVE )
+                else:
+                    AgMD2_SetAttributeViInt32( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_SLOPE, AGMD2_VAL_POSITIVE )
 
         AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_ACTIVE_TRIGGER_SOURCE , ActiveTrigger )
-        if args.trigger_level:
-            AgMD2_SetAttributeViReal64( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_LEVEL, args.trigger_level )
-        if args.trigger_delay:
-            AgMD2_SetAttributeViReal64( vi, "", AGMD2_ATTR_TRIGGER_DELAY, args.trigger_delay )
-            stderr.write( "==>td:%g\n"%AgMD2_GetAttributeViReal64( vi, "", AGMD2_ATTR_TRIGGER_DELAY ) )
+
+        # Manages channels
+        for ch in args.read_channels:
+            channel = "Channel%d"%( ch )
+            if args.vertical_range:  AgMD2_SetAttributeViReal64( vi, channel, AGMD2_ATTR_VERTICAL_RANGE,  args.vertical_range )
+            if args.vertical_offset: AgMD2_SetAttributeViReal64( vi, channel, AGMD2_ATTR_VERTICAL_OFFSET, args.vertical_offset )
 
         # Manages calibration
         if not args.no_calibrate:
-            AgMD2_SelfCalibrate( vi )
+            try:
+                AgMD2_SelfCalibrate( vi )
+            except:
+                AgMD2_SelfCalibrate( vi )
 
         if args.calibration_signal:
             AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "Signal"+args.calibration_signal )
@@ -121,32 +176,52 @@ def Calibrate( vis, args, loop ):
     if isinstance( vis, int ):
         vis = [vis]
     for vi in vis:
+        if not AgMD2_GetAttributeViBoolean( vi, "", AGMD2_ATTR_CALIBRATION_IS_REQUIRED ):
+            continue
         if not args.no_calibrate and args.calibrate_period and loop!=0 and loop%args.calibrate_period==0:
             if args.calibration_signal:
                 AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "" )
-            AgMD2_SelfCalibrate( vi )
+            try:
+                AgMD2_SelfCalibrate( vi )
+            except:
+                AgMD2_SelfCalibrate( vi )
             if args.calibration_signal:
                 AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "Signal"+args.calibration_signal )
 
 
 def Acquire( vis, args ):
+    global _Continue
     if isinstance( vis, int ):
         vis = [vis]
     for vi in vis:
         AgMD2_InitiateAcquisition( vi )
+        #AgMD2_SendSoftwareTrigger( vi )
 
-        # Manages wait/poll
-        if args.poll_timeout:
-            acqDone = False
-            fullwait = float( args.poll_timeout )
-            while fullwait>=0 and _Continue and not acqDone:
-                oncewait = min( 0.2, fullwait )
-                sleep( oncewait/1000.0 )
-                fullwait = fullwait-oncewait
-                isIdle = AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_IS_IDLE )
-                acqDone = isIdle==AGMD2_VAL_ACQUISITION_STATUS_RESULT_TRUE
-        else:
-            AgMD2_WaitForAcquisitionComplete( vi, int( args.wait_timeout*1000 )+1 )
+        while True:
+            # Manages wait/poll
+            if args.poll_timeout:
+                acqDone = False
+                fullwait = float( args.poll_timeout )
+                while fullwait>=0 and _Continue and not acqDone:
+                    oncewait = min( 0.2, fullwait )
+                    sleep( oncewait/1000.0 )
+                    fullwait = fullwait-oncewait
+                    isIdle = AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_IS_IDLE )
+                    acqDone = isIdle==AGMD2_VAL_ACQUISITION_STATUS_RESULT_TRUE
+                if acqDone:
+                    break
+            else:
+                try:
+                    AgMD2_WaitForAcquisitionComplete( vi, int( args.wait_timeout*1000 )+1 )
+                    break
+                except RuntimeError as e:
+                    if args.wait_failure:
+                        raise
+                    else:
+                        print( "WaitForAcquisitionComplete: MAX_TIME_EXCEEDED.", file=stderr )
+                        if not _Continue:
+                            break
+
 
 
 def FetchChannels( vis, args ):
@@ -155,49 +230,69 @@ def FetchChannels( vis, args ):
         vis = [vis]
     for vi in vis:
         # Manages readout
-        if args.records<=1:
-            if args.read_type=='int16':
+        if args.mode=='DDC':
+            if args.ddc_decimation_numerator==4:
                 DataWidth = 16
-                Fetch = AgMD2_FetchWaveformInt16
-            elif args.read_type=='real64':
-                DataWidth = 64
-                Fetch = AgMD2_FetchWaveformReal64
+                Fetch = AgMD2_DDCCoreFetchWaveformInt16Py
             else:
-                DataWidth = 8
-                Fetch = AgMD2_FetchWaveformInt8
+                DataWidth = 32
+                Fetch = AgMD2_DDCCoreFetchWaveformInt32Py
             nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, 1, 0, args.read_samples )
 
-            rec = Record()
+            mrec = DDCMultiRecord()
             for ch in args.read_channels:
-                rec.append( Fetch( vi, "Channel%d"%( ch ), nbrSamplesToRead ) )
-
-            try:
-                OutputTrace( rec, stdout )
-            except BrokenPipeError:
-                _Continue = False
-                break
-
-        else:
-            if args.read_type=='int16':
-                DataWidth = 16
-                Fetch = AgMD2_FetchMultiRecordWaveformInt16Py
-            elif args.read_type=='real64':
-                DataWidth = 64
-                Fetch = AgMD2_FetchMultiRecordWaveformReal64Py
-            else:
-                DataWidth = 8
-                Fetch = AgMD2_FetchMultiRecordWaveformInt8
-            nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, args.read_records, 0, args.read_samples )
-
-            mrec = MultiRecord()
-            for ch in args.read_channels:
-                mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
+                mrec.append( Fetch( vi, "DDCCore%d"%( ch ), 0, args.read_records, 0, args.read_samples, 2*nbrSamplesToRead, args.read_records ) )
 
             try:
                 OutputTrace( mrec, stdout )
             except BrokenPipeError:
                 _Continue = False
                 break
+
+        else:
+            if args.records<=1:
+                if args.read_type=='int16':
+                    DataWidth = 16
+                    Fetch = AgMD2_FetchWaveformInt16
+                elif args.read_type=='real64':
+                    DataWidth = 64
+                    Fetch = AgMD2_FetchWaveformReal64
+                else:
+                    DataWidth = 8
+                    Fetch = AgMD2_FetchWaveformInt8
+                nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, 1, 0, args.read_samples )
+
+                rec = Record()
+                for ch in args.read_channels:
+                    rec.append( Fetch( vi, "Channel%d"%( ch ), nbrSamplesToRead ) )
+
+                try:
+                    OutputTrace( rec, stdout )
+                except BrokenPipeError:
+                    _Continue = False
+                    break
+
+            else:
+                if args.read_type=='int16':
+                    DataWidth = 16
+                    Fetch = AgMD2_FetchMultiRecordWaveformInt16Py
+                elif args.read_type=='real64':
+                    DataWidth = 64
+                    Fetch = AgMD2_FetchMultiRecordWaveformReal64Py
+                else:
+                    DataWidth = 8
+                    Fetch = AgMD2_FetchMultiRecordWaveformInt8
+                nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, args.read_records, 0, args.read_samples )
+
+                mrec = MultiRecord()
+                for ch in args.read_channels:
+                    mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
+
+                try:
+                    OutputTrace( mrec, stdout )
+                except BrokenPipeError:
+                    _Continue = False
+                    break
 
 
 class Runner():
@@ -244,8 +339,8 @@ def Run( args, queue ):
 
     args = DigitizerArgs()
 
-    vis = Initialize( args.resources, "" )
-    ShowInfo( vis )
+    vis = Initialize( args, "" )
+    #ShowInfo( vis )
     ApplyArgs( vis, args )
 
     oldSigTerm = signal( SIGTERM, _SignalEndLoop )
