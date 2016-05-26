@@ -66,7 +66,9 @@ def Apply(*args):
     try:
         records = int( records_var.get() )
         samples = int( samples_var.get() )
-        json.dump( { "records":records, "samples":samples }, fp=stdout )
+        offset = int( offset_var.get() )
+        fscale = int( fscale_var.get() )
+        json.dump( { "records":records, "samples":samples, "vertical_offset":offset, "vertical_range":fscale }, fp=stdout )
         stdout.write( "\n" )
         stdout.flush()
     except ValueError:
@@ -85,7 +87,7 @@ records_var = StringVar()
 records_var.set( "1" )
 records_var.trace( "w", Apply )
 samples_var = StringVar()
-samples_var.set( "200" )
+samples_var.set( "100" )
 samples_var.trace( "w", Apply )
 
 records_entry = EntryWithSpins( mainframe, width=8, textvariable=records_var )
@@ -97,7 +99,23 @@ samples_entry.grid( column=1, row=2, sticky=( W, E ) )
 ttk.Label( mainframe, text="Records" ).grid( column=0, row=1, sticky=W )
 ttk.Label( mainframe, text="Samples" ).grid( column=0, row=2, sticky=E )
 
-ttk.Button( mainframe, text="Apply", command=Apply ).grid( column=0, columnspan=2, row=3, sticky=E )
+offset_var = StringVar()
+offset_var.set( "0" )
+offset_var.trace( "w", Apply )
+fscale_var = StringVar()
+fscale_var.set( "2" )
+fscale_var.trace( "w", Apply )
+
+offset_entry = EntryWithSpins( mainframe, width=8, textvariable=offset_var )
+offset_entry.grid( column=3, row=1, sticky=( W, E ) )
+
+fscale_entry = EntryWithSpins( mainframe, width=12, mode="125", textvariable=fscale_var )
+fscale_entry.grid( column=3, row=2, sticky=( W, E ) )
+
+ttk.Label( mainframe, text="Offset" ).grid( column=2, row=1, sticky=W )
+ttk.Label( mainframe, text="Range " ).grid( column=2, row=2, sticky=E )
+
+ttk.Button( mainframe, text="Apply", command=Apply ).grid( column=0, columnspan=4, row=3, sticky=E )
 
 for child in mainframe.winfo_children():
     child.grid_configure( padx=5, pady=5 )
