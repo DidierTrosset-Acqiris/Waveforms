@@ -93,42 +93,75 @@ def ShowInfo( vis ):
         print( "Firmware:", AgMD2_GetAttributeViString( vi, "", AGMD2_ATTR_INSTRUMENT_FIRMWARE_REVISION, 256 ), file=stderr )
 
 
+def AgMD2_UpdateAttributeViInt8( vi, repCap, attr, value ):
+    if AgMD2_GetAttributeViInt8(  vi, repCap, attr )!=value:
+        AgMD2_SetAttributeViInt8(  vi, repCap, attr , value )   
+
+def AgMD2_UpdateAttributeViInt16( vi, repCap, attr, value ):
+    if AgMD2_GetAttributeViInt16(  vi, repCap, attr )!=value:
+        AgMD2_SetAttributeViInt16(  vi, repCap, attr , value )   
+
+def AgMD2_UpdateAttributeViInt32( vi, repCap, attr, value ):
+    if AgMD2_GetAttributeViInt32(  vi, repCap, attr )!=value:
+        AgMD2_SetAttributeViInt32(  vi, repCap, attr , value )   
+
+def AgMD2_UpdateAttributeViInt64( vi, repCap, attr, value ):
+    if AgMD2_GetAttributeViInt64(  vi, repCap, attr )!=value:
+        AgMD2_SetAttributeViInt64(  vi, repCap, attr , value )   
+
+def AgMD2_UpdateAttributeViReal64( vi, repCap, attr, value ):
+    if AgMD2_GetAttributeViReal64(  vi, repCap, attr )!=value:
+        AgMD2_SetAttributeViReal64(  vi, repCap, attr , value )   
+
+def AgMD2_UpdateAttributeViBoolean( vi, repCap, attr, value ):
+    if AgMD2_GetAttributeViBoolean(  vi, repCap, attr )!=value:
+        AgMD2_SetAttributeViBoolean(  vi, repCap, attr , value )   
+
+def AgMD2_UpdateAttributeViString( vi, repCap, attr, value ):
+    if AgMD2_GetAttributeViString(  vi, repCap, attr, 256 )!=value:
+        AgMD2_SetAttributeViString(  vi, repCap, attr , value )   
+
+
 def ApplyArgs( vis, args ):
     if isinstance( vis, int ):
         vis = [vis]
     for vi in vis:
         # Manages the clocking scheme
         if args.clock_external:
-            AgMD2_SetAttributeViInt32(  vi, "", AGMD2_ATTR_SAMPLE_CLOCK_SOURCE , AGMD2_VAL_SAMPLE_CLOCK_SOURCE_EXTERNAL )   
-            AgMD2_SetAttributeViReal64( vi, "", AGMD2_ATTR_SAMPLE_CLOCK_EXTERNAL_FREQUENCY , args.clock_external )   
-            AgMD2_SetAttributeViReal64( vi, "", AGMD2_ATTR_SAMPLE_CLOCK_EXTERNAL_DIVIDER , args.clock_ext_divider )   
+            AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_SAMPLE_CLOCK_SOURCE , AGMD2_VAL_SAMPLE_CLOCK_SOURCE_EXTERNAL )   
+            AgMD2_UpdateAttributeViReal64( vi, "", AGMD2_ATTR_SAMPLE_CLOCK_EXTERNAL_FREQUENCY , args.clock_external )   
+            AgMD2_UpdateAttributeViReal64( vi, "", AGMD2_ATTR_SAMPLE_CLOCK_EXTERNAL_DIVIDER , args.clock_ext_divider )   
         else:
+            AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_SAMPLE_CLOCK_SOURCE , AGMD2_VAL_SAMPLE_CLOCK_SOURCE_INTERNAL )   
             if args.clock_ref_external:
-                AgMD2_SetAttributeViInt32(  vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_EXTERNAL )
+                AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_EXTERNAL )
             elif args.clock_ref_axie:
-                AgMD2_SetAttributeViInt32(  vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_AXIE_CLK100 )
+                AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_AXIE_CLK100 )
 
         # Manages acquisition mode
         if args.mode=='DDC':
-            AgMD2_SetAttributeViInt32( vi, "", AGMD2_ATTR_ACQUISITION_MODE, AGMD2_VAL_ACQUISITION_MODE_DIGITAL_DOWN_CONVERSION )
+            AgMD2_UpdateAttributeViInt32( vi, "", AGMD2_ATTR_ACQUISITION_MODE, AGMD2_VAL_ACQUISITION_MODE_DIGITAL_DOWN_CONVERSION )
             nbrDDCCores = AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_DDCCORE_COUNT )
-            for core in range( nbrDDCCores ):
-                ddcCore = "DDCCore%d"%( core+1 )
-                AgMD2_SetAttributeViInt64( vi, ddcCore, AGMD2_ATTR_DDCCORE_DECIMATION_NUMERATOR, args.ddc_decimation_numerator )
-                AgMD2_SetAttributeViInt64( vi, ddcCore, AGMD2_ATTR_DDCCORE_DECIMATION_DENOMINATOR, args.ddc_decimation_denominator )
+            DDCCores = ["DDCCore%d"%( core+1 ) for core in range( nbrDDCCores )]
+            for ddcCore in DDCCores:
+                AgMD2_UpdateAttributeViReal64( vi, ddcCore, AGMD2_ATTR_DDCCORE_CENTER_FREQUENCY, args.ddc_local_oscillator_frequency )
+                if args.ddc_decimation_numerator:
+                    AgMD2_UpdateAttributeViInt64( vi, ddcCore, AGMD2_ATTR_DDCCORE_DECIMATION_NUMERATOR, args.ddc_decimation_numerator )
+                if args.ddc_decimation_denominator:
+                    AgMD2_UpdateAttributeViInt64( vi, ddcCore, AGMD2_ATTR_DDCCORE_DECIMATION_DENOMINATOR, args.ddc_decimation_denominator )
 
         # Manages conbination
         if args.interleave:
             ch, sub = args.interleave[:2]
-            AgMD2_SetAttributeViString( vi, "Channel%d"%( ch ), AGMD2_ATTR_TIME_INTERLEAVED_CHANNEL_LIST, "Channel%d"%( sub ) )
+            AgMD2_UpdateAttributeViString( vi, "Channel%d"%( ch ), AGMD2_ATTR_TIME_INTERLEAVED_CHANNEL_LIST, "Channel%d"%( sub ) )
 
         # Manages sample rate: set to the max, and then adjust if required
-        #try: AgMD2_SetAttributeViReal64(  vi, "", AGMD2_ATTR_SAMPLE_RATE, 1e10 )
+        #try: AgMD2_UpdateAttributeViReal64(  vi, "", AGMD2_ATTR_SAMPLE_RATE, 1e10 )
         #except: pass
         if args.sampling_frequency:
-            AgMD2_SetAttributeViReal64(  vi, "", AGMD2_ATTR_SAMPLE_RATE, args.sampling_frequency )   
-        AgMD2_SetAttributeViInt64(  vi, "", AGMD2_ATTR_RECORD_SIZE, args.samples )
-        AgMD2_SetAttributeViInt64(  vi, "", AGMD2_ATTR_NUM_RECORDS_TO_ACQUIRE, args.records )
+            AgMD2_UpdateAttributeViReal64(  vi, "", AGMD2_ATTR_SAMPLE_RATE, args.sampling_frequency )   
+        AgMD2_UpdateAttributeViInt64(  vi, "", AGMD2_ATTR_RECORD_SIZE, args.samples )
+        AgMD2_UpdateAttributeViInt64(  vi, "", AGMD2_ATTR_NUM_RECORDS_TO_ACQUIRE, args.records )
         assert args.records == AgMD2_GetAttributeViInt64(  vi, "", AGMD2_ATTR_NUM_RECORDS_TO_ACQUIRE )
 
         # Manages trigger
@@ -143,33 +176,33 @@ def ApplyArgs( vis, args ):
                 ActiveTrigger = "Internal1"
 
             if args.trigger_level!=None:
-                AgMD2_SetAttributeViReal64( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_LEVEL, args.trigger_level )
+                AgMD2_UpdateAttributeViReal64( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_LEVEL, args.trigger_level )
             if args.trigger_delay!=None:
-                AgMD2_SetAttributeViReal64( vi, "", AGMD2_ATTR_TRIGGER_DELAY, args.trigger_delay )
+                AgMD2_UpdateAttributeViReal64( vi, "", AGMD2_ATTR_TRIGGER_DELAY, args.trigger_delay )
                 stderr.write( "==>td:%g\n"%AgMD2_GetAttributeViReal64( vi, "", AGMD2_ATTR_TRIGGER_DELAY ) )
             if args.trigger_slope!=None:
                 if args.trigger_slope in ["negative", "n"]:
-                    AgMD2_SetAttributeViInt32( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_SLOPE, AGMD2_VAL_NEGATIVE )
+                    AgMD2_UpdateAttributeViInt32( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_SLOPE, AGMD2_VAL_NEGATIVE )
                 else:
-                    AgMD2_SetAttributeViInt32( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_SLOPE, AGMD2_VAL_POSITIVE )
+                    AgMD2_UpdateAttributeViInt32( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_SLOPE, AGMD2_VAL_POSITIVE )
 
-        AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_ACTIVE_TRIGGER_SOURCE , ActiveTrigger )
+        AgMD2_UpdateAttributeViString( vi, "", AGMD2_ATTR_ACTIVE_TRIGGER_SOURCE , ActiveTrigger )
+
+        if args.trigger_output_enabled!=None:
+            AgMD2_UpdateAttributeViBoolean( vi, "", AGMD2_ATTR_TRIGGER_OUTPUT_ENABLED, VI_TRUE if args.trigger_output_enabled else VI_FALSE )
+        if args.trigger_output_source!=None:
+            AgMD2_UpdateAttributeViString( vi, "", AGMD2_ATTR_TRIGGER_OUTPUT_SOURCE, args.trigger_output_source )
+        if args.trigger_output_offset!=None:
+            AgMD2_UpdateAttributeViReal64( vi, "", AGMD2_ATTR_TRIGGER_OUTPUT_OFFSET, args.trigger_output_offset )
 
         # Manages channels
         for ch in args.read_channels:
             channel = "Channel%d"%( ch )
-            if args.vertical_range:  AgMD2_SetAttributeViReal64( vi, channel, AGMD2_ATTR_VERTICAL_RANGE,  args.vertical_range )
-            if args.vertical_offset: AgMD2_SetAttributeViReal64( vi, channel, AGMD2_ATTR_VERTICAL_OFFSET, args.vertical_offset )
-
-        # Manages calibration
-        if not args.no_calibrate:
-            try:
-                AgMD2_SelfCalibrate( vi )
-            except:
-                AgMD2_SelfCalibrate( vi )
+            if args.vertical_range:  AgMD2_UpdateAttributeViReal64( vi, channel, AGMD2_ATTR_VERTICAL_RANGE,  args.vertical_range )
+            if args.vertical_offset: AgMD2_UpdateAttributeViReal64( vi, channel, AGMD2_ATTR_VERTICAL_OFFSET, args.vertical_offset )
 
         if args.calibration_signal:
-            AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "Signal"+args.calibration_signal )
+            AgMD2_UpdateAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "Signal"+args.calibration_signal )
 
 
 def Calibrate( vis, args, loop ):
@@ -178,18 +211,20 @@ def Calibrate( vis, args, loop ):
     for vi in vis:
         if not AgMD2_GetAttributeViBoolean( vi, "", AGMD2_ATTR_CALIBRATION_IS_REQUIRED ):
             continue
-        if not args.no_calibrate and args.calibrate_period and loop!=0 and loop%args.calibrate_period==0:
-            if args.calibration_signal:
-                AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "" )
-            try:
-                AgMD2_SelfCalibrate( vi )
-            except:
-                AgMD2_SelfCalibrate( vi )
-            if args.calibration_signal:
-                AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "Signal"+args.calibration_signal )
+        if loop!=0 and args.calibrate_period and loop%args.calibrate_period!=0:
+            continue
+
+        print( "==> Calibration required.", file=stderr )
+        if args.calibration_signal:
+            AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "" )
+
+        AgMD2_SelfCalibrate( vi )
+
+        if args.calibration_signal:
+            AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "Signal"+args.calibration_signal )
 
 
-def Acquire( vis, args ):
+def Acquire( vis, args, queue ):
     global _Continue
     if isinstance( vis, int ):
         vis = [vis]
@@ -202,25 +237,29 @@ def Acquire( vis, args ):
             if args.poll_timeout:
                 acqDone = False
                 fullwait = float( args.poll_timeout )
-                while fullwait>=0 and _Continue and not acqDone:
+                while fullwait>=0 and _Continue and queue.empty() and not acqDone:
                     oncewait = min( 0.2, fullwait )
                     sleep( oncewait/1000.0 )
                     fullwait = fullwait-oncewait
                     isIdle = AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_IS_IDLE )
                     acqDone = isIdle==AGMD2_VAL_ACQUISITION_STATUS_RESULT_TRUE
                 if acqDone:
-                    break
+                    return True
+                else:
+                    AgMD2_Abort( vi )
+                    return False
             else:
                 try:
                     AgMD2_WaitForAcquisitionComplete( vi, int( args.wait_timeout*1000 )+1 )
-                    break
+                    return True
                 except RuntimeError as e:
                     if args.wait_failure:
                         raise
                     else:
                         print( "WaitForAcquisitionComplete: MAX_TIME_EXCEEDED.", file=stderr )
-                        if not _Continue:
-                            break
+                        if not _Continue or not queue.empty():
+                            AgMD2_Abort( vi )
+                            return False
 
 
 
@@ -250,6 +289,9 @@ def FetchChannels( vis, args ):
                 break
 
         else:
+            if not args.read_type:
+                nbrAdcBits = AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_INSTRUMENT_INFO_NBR_ADC_BITS )
+                args.read_type = 'int8' if nbrAdcBits<=8 else 'int16'
             if args.records<=1:
                 if args.read_type=='int16':
                     DataWidth = 16
@@ -354,9 +396,8 @@ def Run( args, queue ):
             
         Calibrate( vis, args, loop )
 
-        Acquire( vis, args )
-        
-        FetchChannels( vis, args )
+        if Acquire( vis, args, queue ):
+            FetchChannels( vis, args )
 
         # Manages looping
         loop = loop+1
@@ -375,6 +416,8 @@ def Run( args, queue ):
 
 
 def ReadCommands( ins, queue ):
+    global _Continue
+
     for bytecmd in ins:
         if bytecmd=="":
             break
@@ -386,6 +429,8 @@ def ReadCommands( ins, queue ):
             queue.put( cmd )
         except Exception as e:
             print( e, file=stderr )
+    # Exit when input closes
+    _Continue = False
 
 
 def main():
