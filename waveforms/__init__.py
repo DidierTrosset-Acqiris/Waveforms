@@ -18,6 +18,9 @@ from sys import stderr
     using the FetchMultiRecordWaveform functions of IVI Digitizer. MultiRecord should be used
     as an array of records, which in turn should be used as an array of waveforms.
     
+    DDCMultiRecord is a specialized version of MultiRecord handling DDC data retreived
+    using the DDCCore fetch functions. They should be used the same way as MuiltRecord.
+
     The waveform objects accessed through the Record and MultiRecord classes all provide the
     usual properties of IVI Digitizer waveforms: Samples, ActualPoints, InitialXOffset,
     InitialXTimeSeconds, InitialXTimeFraction, XIncrement, ScaleFactor, and ScaleOffset.
@@ -549,7 +552,28 @@ class _DDCSubWaveform:
         return self.ActualPoints
 
     def __getitem__( self, index ):
-        return self.Samples[index]
+        return self._sample_view( index )
+
+    def _sample_view( self, index ):
+        first = self.mwfm.FirstValidPoint[self.index]
+        actual = self.mwfm.ActualPoints[self.index]
+        samples = self.mwfm.SampleArray
+        real = samples[2*first+2*index]
+        imag = samples[2*first+2*index+1]
+        if self._view=='REAL':
+            return real
+        elif self._view=='IMAGINARY':
+            return imag
+        elif self._view=='TUPLE':
+            return ( real, imag )
+        elif self._view=='COMPLEX':
+            return real + imag*1j
+        elif self._view=='MAGNITUDE':
+            return sqrt( real**2 + imag**2 )
+        elif self._view=='PHASE':
+            return arctan2( imag, real )
+        else:
+            raise RuntimeError( "Unknown DDCWaveform view type '%s'."%( self._view ) )
 
     @property
     def Samples( self ):
