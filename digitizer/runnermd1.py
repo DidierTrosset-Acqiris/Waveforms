@@ -3,7 +3,7 @@
 """
     Runs continuous acquisitions
 
-    Copyright (C) Keysight Technologies 2015
+    Copyright (C) Keysight Technologies 2015-2016
    
     Started: August 24th, 2015
     By:      Didier Trosset
@@ -122,6 +122,9 @@ def Acquire( vis, args ):
         vis = [vis]
     for vi in vis:
         AgMD1_InitiateAcquisition( vi )
+
+        if args.immediate_trigger:
+            AgMD1_SendSoftwareTrigger( vi )
 
         # Manages wait/poll
         if args.poll_timeout:

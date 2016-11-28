@@ -14,7 +14,7 @@
 
 from AgMD2 import *
 from waveforms.trace import OutputTrace
-from waveforms import Record, MultiRecord, DDCMultiRecord
+from waveforms import Record, MultiRecord, DDCMultiRecord, AccMultiRecord
 from digitizer.argparser import DigitizerArgs, RefreshArgs
 from sys import stdin, stdout, stderr
 from time import sleep
@@ -36,6 +36,11 @@ def Initialize( args, options ):
     vis = []
     try:
         for rsrc in resources:
+            if rsrc[:3]=="SIM":
+                model = rsrc[5:11]
+                options = "Simulate=1, DriverSetup= Model="+model
+                rsrc = ""
+                print( "INIT:", rsrc, model, file=stderr )
             Vi = AgMD2_InitWithOptions( rsrc, 0, reset, options )
             vis.append( Vi )
             # Always set private access.
@@ -137,6 +142,8 @@ def ApplyArgs( vis, args ):
                 AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_EXTERNAL )
             elif args.clock_ref_axie:
                 AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_AXIE_CLK100 )
+            else:
+                AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_INTERNAL )
 
         # Manages acquisition mode
         if args.mode=='DDC':
@@ -149,6 +156,10 @@ def ApplyArgs( vis, args ):
                     AgMD2_UpdateAttributeViInt64( vi, ddcCore, AGMD2_ATTR_DDCCORE_DECIMATION_NUMERATOR, args.ddc_decimation_numerator )
                 if args.ddc_decimation_denominator:
                     AgMD2_UpdateAttributeViInt64( vi, ddcCore, AGMD2_ATTR_DDCCORE_DECIMATION_DENOMINATOR, args.ddc_decimation_denominator )
+
+        if args.mode=='AVG':
+            AgMD2_UpdateAttributeViInt32( vi, "", AGMD2_ATTR_ACQUISITION_MODE, AGMD2_VAL_ACQUISITION_MODE_AVERAGER )
+            AgMD2_UpdateAttributeViInt32( vi, "", AGMD2_ATTR_ACQUISITION_NUMBER_OF_AVERAGES, args.averages )
 
         # Manages conbination
         if args.interleave:
@@ -204,6 +215,19 @@ def ApplyArgs( vis, args ):
         if args.calibration_signal:
             AgMD2_UpdateAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "Signal"+args.calibration_signal )
 
+        # Manages TSR
+        if args.tsr:
+            AgMD2_UpdateAttributeViBoolean( vi, "", AGMD2_ATTR_TSR_ENABLED, VI_TRUE if args.tsr else VI_FALSE )
+
+        # Manages ControlIO
+        if args.control_io1:
+            AgMD2_UpdateAttributeViString( vi, "ControlIO1", AGMD2_ATTR_CONTROL_IO_SIGNAL, args.control_io1 )
+        if args.control_io2:
+            AgMD2_UpdateAttributeViString( vi, "ControlIO2", AGMD2_ATTR_CONTROL_IO_SIGNAL, args.control_io2 )
+
+        AgMD2_ApplySetup( vi )
+        #print( "Firmware:", AgMD2_GetAttributeViString( vi, "", AGMD2_ATTR_INSTRUMENT_FIRMWARE_REVISION, 256 ), file=stderr )
+
 
 def Calibrate( vis, args, loop ):
     if isinstance( vis, int ):
@@ -229,37 +253,53 @@ def Acquire( vis, args, queue ):
     if isinstance( vis, int ):
         vis = [vis]
     for vi in vis:
-        AgMD2_InitiateAcquisition( vi )
-        #AgMD2_SendSoftwareTrigger( vi )
+        if args.tsr:
+            # To find whether the acquisition is already started, try to continue it. In case of error, start it.
+            try:
+                print( "TSR Continue", file=stderr )
+                AgMD2_TSRContinue( vi )
+            except:
+                print( "Initiate Acquistion", file=stderr )
+                AgMD2_InitiateAcquisition( vi )
 
-        while True:
-            # Manages wait/poll
-            if args.poll_timeout:
-                acqDone = False
-                fullwait = float( args.poll_timeout )
-                while fullwait>=0 and _Continue and queue.empty() and not acqDone:
-                    oncewait = min( 0.2, fullwait )
-                    sleep( oncewait/1000.0 )
-                    fullwait = fullwait-oncewait
-                    isIdle = AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_IS_IDLE )
-                    acqDone = isIdle==AGMD2_VAL_ACQUISITION_STATUS_RESULT_TRUE
-                if acqDone:
+            while True:
+                complete = AgMD2_GetAttributeViBoolean( vi, "", AGMD2_ATTR_TSR_IS_ACQUISITION_COMPLETE )
+                print( "GetAttribute TSR_IS_ACQUISITION_COMPLETE :", complete, file=stderr )
+                if complete:
                     return True
-                else:
-                    AgMD2_Abort( vi )
-                    return False
-            else:
-                try:
-                    AgMD2_WaitForAcquisitionComplete( vi, int( args.wait_timeout*1000 )+1 )
-                    return True
-                except RuntimeError as e:
-                    if args.wait_failure:
-                        raise
+                sleep( 0.2 )
+
+        else:
+            AgMD2_InitiateAcquisition( vi )
+
+            while True:
+                # Manages wait/poll
+                if args.poll_timeout:
+                    acqDone = False
+                    fullwait = float( args.poll_timeout )
+                    while fullwait>=0 and _Continue and queue.empty() and not acqDone:
+                        oncewait = min( 0.2, fullwait )
+                        sleep( oncewait/1000.0 )
+                        fullwait = fullwait-oncewait
+                        isIdle = AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_IS_IDLE )
+                        acqDone = isIdle==AGMD2_VAL_ACQUISITION_STATUS_RESULT_TRUE
+                    if acqDone:
+                        return True
                     else:
-                        print( "WaitForAcquisitionComplete: MAX_TIME_EXCEEDED.", file=stderr )
-                        if not _Continue or not queue.empty():
-                            AgMD2_Abort( vi )
-                            return False
+                        AgMD2_Abort( vi )
+                        return False
+                else:
+                    try:
+                        AgMD2_WaitForAcquisitionComplete( vi, int( args.wait_timeout*1000 )+1 )
+                        return True
+                    except RuntimeError as e:
+                        if args.wait_failure:
+                            raise
+                        else:
+                            print( "WaitForAcquisitionComplete: MAX_TIME_EXCEEDED.", file=stderr )
+                            if not _Continue or not queue.empty():
+                                AgMD2_Abort( vi )
+                                return False
 
 
 
@@ -278,9 +318,29 @@ def FetchChannels( vis, args ):
                 Fetch = AgMD2_DDCCoreFetchWaveformInt32Py
             nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, 1, 0, args.read_samples )
 
-            mrec = DDCMultiRecord()
+            mrec = DDCMultiRecord( checkXOffset=not args.no_check_x_offset )
+            mrec.view = args.ddc_sample_view
             for ch in args.read_channels:
                 mrec.append( Fetch( vi, "DDCCore%d"%( ch ), 0, args.read_records, 0, args.read_samples, 2*nbrSamplesToRead, args.read_records ) )
+
+            try:
+                OutputTrace( mrec, stdout )
+            except BrokenPipeError:
+                _Continue = False
+                break
+
+        elif args.mode=='AVG':
+            if args.read_type == 'real64':
+                DataWidth = 64
+                Fetch = AgMD2_FetchAccumulatedWaveformReal64Py
+            else:
+                DataWidth = 32
+                Fetch = AgMD2_FetchAccumulatedWaveformInt32Py
+            nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, 1, 0, args.read_samples )
+
+            mrec = AccMultiRecord( checkXOffset=not args.no_check_x_offset )
+            for ch in args.read_channels:
+                mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, 2*nbrSamplesToRead, args.read_records ) )
 
             try:
                 OutputTrace( mrec, stdout )
@@ -304,9 +364,16 @@ def FetchChannels( vis, args ):
                     Fetch = AgMD2_FetchWaveformInt8
                 nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, 1, 0, args.read_samples )
 
-                rec = Record()
-                for ch in args.read_channels:
-                    rec.append( Fetch( vi, "Channel%d"%( ch ), nbrSamplesToRead ) )
+                try:
+                    rec = Record()
+                    for ch in args.read_channels:
+                        rec.append( Fetch( vi, "Channel%d"%( ch ), nbrSamplesToRead ) )
+                except RuntimeError:
+                    AgMD2_SetAttributeViBoolean( vi, "", AGMD2_ATTR_ERROR_ON_OVERRANGE_ENABLED, False )
+                    rec = Record( checkXOffset=not args.no_check_x_offset )
+                    for ch in args.read_channels:
+                        rec.append( Fetch( vi, "Channel%d"%( ch ), nbrSamplesToRead ) )
+                    AgMD2_SetAttributeViBoolean( vi, "", AGMD2_ATTR_ERROR_ON_OVERRANGE_ENABLED, True )
 
                 try:
                     OutputTrace( rec, stdout )
@@ -326,7 +393,7 @@ def FetchChannels( vis, args ):
                     Fetch = AgMD2_FetchMultiRecordWaveformInt8
                 nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, args.read_records, 0, args.read_samples )
 
-                mrec = MultiRecord()
+                mrec = MultiRecord( checkXOffset=not args.no_check_x_offset ) 
                 for ch in args.read_channels:
                     mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
 
@@ -406,6 +473,9 @@ def Run( args, queue ):
             continue
 
         if loop>=args.loops:
+            if args.tsr:
+                for vi in vis:
+                    AgMD2_Abort( vi )
             break
 
     signal( SIGTERM, oldSigTerm )

@@ -19,7 +19,8 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--loops", "-l",                            type=int,   default=-1 )
         self.add_argument( "--records", "-r",                          type=int,   default=1 )
         self.add_argument( "--samples", "-s",                          type=int,   default=200 )
-        self.add_argument( "--mode", "-m",                             type=str,   default='DGT', choices=['DGT', 'DDC'] )
+        self.add_argument( "--averages", "-a",                         type=int,   default=1 )
+        self.add_argument( "--mode", "-m",                             type=str,   default='DGT', choices=['DGT', 'DDC', 'AVG'] )
 
         self.add_argument( "--no-calibrate", "-nc",                                default=False, action='store_true' )
         self.add_argument( "--calibrate-fast", "-cf",                              default=False, action='store_true' )
@@ -59,7 +60,7 @@ class DigitizerParser( ArgumentParser ):
 
         self.add_argument( "--read-records", "-rr",        nargs=None, type=int,   default=None )
         self.add_argument( "--read-samples", "-rs",        nargs=None, type=int,   default=None )
-        self.add_argument( "--read-type", "-rt",           nargs=None, type=str,   default=None, choices=['int8', 'int16', 'real64'] )
+        self.add_argument( "--read-type", "-rt",           nargs=None, type=str,   default=None, choices=['int8', 'int16', 'int32', 'real64'] )
         self.add_argument( "--read-channels", "-rc",       nargs='*',  type=int,   default=[1] )
 
         self.add_argument( "--vertical-range", "-vr",                  type=float, default=None )
@@ -67,9 +68,18 @@ class DigitizerParser( ArgumentParser ):
 
         self.add_argument( "--calibration-signal", "-cs",              type=str  , default=None, choices=['Gnd', 'T0', 'Cal100', '100MHz', 'InterleavingDelay'] )
 
+        self.add_argument( "--tsr", "-tsr",                                        default=False, action='store_true' )
+
+        self.add_argument( "--control-io1", "-io1",                    type=str,   default=None )
+        self.add_argument( "--control-io2", "-io2",                    type=str,   default=None )
+
         self.add_argument( "--ddc-decimation-numerator", "-ddn",       type=int )
         self.add_argument( "--ddc-decimation-denominator", "-ddd",     type=int )
         self.add_argument( "--ddc-local-oscillator-frequency", "-ddf", type=float, default=0.0 )
+        self.add_argument( "--ddc-sample-view", "-dsv",                type=str,   default="REAL", choices=['REAL', 'IMAGINARY', 'COMPLEX', 'PHASE'] )
+
+        self.add_argument( "--no-check-x-offset", "-ncxo",                         default=False, action='store_true' )
+
 
     def parse_args( self, *largs, **kwargs ):
         args = ArgumentParser.parse_args( self, *largs, **kwargs )
