@@ -98,6 +98,7 @@ setup(
     entry_points = {
         'console_scripts': [
             'RunAgMD1=digitizer.runnermd1:main',
+            'RunAgMD2=digitizer.runnermd2:main',
             'PersistViewer=viewer.persist:main',
             'LiveViewer=viewer.live:main',
         ],
