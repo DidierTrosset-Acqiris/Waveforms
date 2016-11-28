@@ -23,6 +23,7 @@ class TraceHandler:
     def __init__(self):
         self.keep_line = None 
         self.is_valid = False
+        self.FullScale = 65536
         pass
 
     def SetKeepLine( self, line ):
@@ -64,7 +65,7 @@ class TraceHandler:
         if strKey=='#CHANNELS':
             self.nbrChannels = int(strValue)
         if strKey=='FULLSCALE':
-            self.FullScale = float(strValue)
+            self.FullScale = float(strValue) if float(strValue)!=int(strValue) else int(strValue)
             self.dtype = int32 if self.FullScale==2**32 else int16 if self.FullScale==2**16 else int8 if self.FullScale==2**8 else float64
         if strKey=='CHANNELFSR':
             self.channelfsr = float(strValue)
@@ -150,7 +151,7 @@ def ParseTrace( input, handler ):
 
 
 
-def ReadTrace( f ):
+def _test_ReadTrace( f ):
     """
     This is how to use the Trace module. Of course, effective use will not
     define the text of the file content, but read it from an actual file!
@@ -202,10 +203,12 @@ def ReadTrace( f ):
     >>> f = StringIO( trace )
     >>> for rec in ReadTrace( f ):
     ...    print( len( rec ) )
+    ...    print( len( rec ), rec.ActualPoints, rec.XIncrement, rec.ScaleFactor, rec.ScaleOffset )
     ...    for w in rec:
     ...        print( w.ActualPoints, w.InitialXOffset, w.InitialXTimeSeconds, w.InitialXTimeFraction, w.XIncrement, w.ScaleFactor, w.ScaleOffset )
     ...        print( w.Samples )
     2
+    2 32 6.25e-10 1.52587890625e-05 0.0
     32 -7.93457e-11 0.0 0.0 6.25e-10 1.52587890625e-05 0.0
     [ -2243   3171   8093  11667  13533  13203  10973   6947   1869  -3485
       -8403 -11933 -13571 -13213 -10755  -6573  -1427   4019   8701  12067
@@ -291,6 +294,10 @@ def ReadTrace( f ):
     8 -7.93457e-11 0.0 0.0 6.25e-10 1.0 0.0
     [  4258  -1202  -6542 -10818 -13406 -13938 -12366  -8770]
     """
+
+
+def ReadTrace( f ):
+    """ Read a trace from a file """
     h = TraceHandler()
     keepon = True
     try:
@@ -421,16 +428,30 @@ def _test_OutputTrace( records, out ):
     """
 
 
-def OutputTrace( records, out ):
+def OutputTrace( records, out, Model=None ):
     """ Write the given Record, MultiRecord, DDCMultiRecord, or AccMultiRecord to the given out file object.
     """
     if isinstance( records, Record ):
         records = [records]
     for rec in records:
+        #print( "$RecordType", "Digitizer", file=out )
+        #print( "$ActualChannels", len( rec ), file=out )
+        #print( "$SampleType", "Int32", file=out )
+        #print( "$FullScale", rec.FullScale, file=out )
+        #if Model: print( "$Model", Model, file=out )
+        #print( "$XIncrement", rec.XIncrement, file=out )
+        #print( "$InitialXOffset", rec.InitialXOffset, file=out )
+        #print( "$InitialXTimeSeconds", rec.InitialXTimeSeconds, file=out )
+        #print( "$InitialXTimeFraction", rec.InitialXTimeFraction, file=out )
+        #print( "$ScaleFactor", rec.ScaleFactor, file=out )
+        #print( "$ScaleOffset", rec.ScaleOffset, file=out )
+        #try: print( "$ActualAverages", rec.ActualAverages, file=out )
+        #except: pass
+
         out.write( "$#CHANNELS %d\n" % len( rec ) )
         out.write( "$SIGNED %d\n" % 1 )
         out.write( "$FORMATTING DECIMAL\n" )
-        out.write( "$FULLSCALE %f\n" %( rec.FullScale ) )
+        out.write( "$FULLSCALE "+str( rec.FullScale )+"\n" )
         out.write( "$MODEL %s\n" % "U5303A" )
         out.write( "$SAMPIVAL %g\n" % rec.XIncrement )
         #out.write( "$CHANNELFSR -1\n" )
