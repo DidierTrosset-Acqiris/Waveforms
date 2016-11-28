@@ -24,7 +24,7 @@ try:
     from numpy import maximum, minimum
     USE_SCIPY = 1
 except ImportError:
-    sys.stderr.write("MicroView requires scipy to run. See http://www.scipy.org/\n")
+    sys.stderr.write("Live Viewer requires scipy for better experience. See http://www.scipy.org/\n")
     USE_SCIPY = 0
 
 import matplotlib
@@ -32,10 +32,6 @@ matplotlib.use('TkAgg')   # Plot to TkInter
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-#USE_SCIPY = 0
-ShowSignal = 1
-ShowSpectrum = 0
-ShowFitteSine = 0
 
 def CalcFourier( record, nbrSamples ):
     record.spectrums = []
@@ -363,7 +359,7 @@ def CalculateTrace(trace):
     try:
         trace.nbrFftSamples = CalcBestNbrSamples(trace, trace.fittedSine.all[OMEGA]/2./pi/trace.XIncrement)
     except:
-        trace.nbrFftSamples = trace.ActualPoints if trace.ActualPoints<32867 else 32768
+        trace.nbrFftSamples = trace.ActualPoints if trace.ActualPoints<32768 else 32768
     CalcFourier(trace, trace.nbrFftSamples)
     # Calculate ratios
     if ShowSignal or ShowSpectrum or ShowFittedSine:
@@ -523,10 +519,10 @@ def ShowImages(trace):
                     linesSignals[ch], = plotSignal.plot(time, wfm.Samples, color=_GetColor(ch), marker=marker)
                     plotSignal.get_xaxis().axes.set_xlim(0, timeFull - (timeFull / trace.ActualPoints))
                     yscale = trace.FullScale
-                    if True: # trace is signed:
+                    if yscale>100: # Big: raw sample value; Small: voltage/phase
                         ylim = (-yscale/2, yscale/2 - 1)
                     else:
-                        ylim = (0, yscale - 1)
+                        ylim = (-yscale/2, yscale/2)
                     plotSignal.get_yaxis().axes.set_ylim(*ylim)
                 else:
                     if trace.InitialXOffset!=0.0:
@@ -562,7 +558,7 @@ def ShowImages(trace):
             spectrumReset = False
     # Fitted sine values
     mismatch = Mismatch()
-    if ShowFitteSine and trace.fittedSine:
+    if ShowFittedSine and trace.fittedSine:
         psine = trace.fittedSine.all
         FullScale = max(1, trace.fittedSine.FullScale)
         sampival = max(1e-12, trace.fittedSine.XIncrement)
@@ -609,9 +605,9 @@ Pause = False
 Force = True
 
 def ReadInput( queue ):
-    global ShowLive
+    global ShowAll
     for trace in GetTraceFromSource():
-        if ShowLive:
+        if not ShowAll:
             while not queue.empty():
                 queue.get_nowait()
         queue.put( trace )
@@ -657,12 +653,12 @@ def RunNext():
 
 
 def main():
-    global ShowSignal, ShowSpectrum, ShowFittedSine, ShowLive
+    global ShowSignal, ShowSpectrum, ShowFittedSine, ShowAll
     global Pause, RunCommand, InputFile, TcpPort, TcpBind, TcpHost
     global queue
 
     from argparse import ArgumentParser
-    parser = ArgumentParser( "MicroView" )
+    parser = ArgumentParser( "Live Viewer" )
     parser.add_argument( "--signal", action='store_true', default=None )
     parser.add_argument( "--spectrum", action='store_true' )
     parser.add_argument( "--fitted-sine", action='store_true' )
@@ -673,14 +669,14 @@ def main():
     parser.add_argument( "--listen", type=int, default=None )
     parser.add_argument( "--bind", type=str, default=None )
     parser.add_argument( "--min-max-signal", action='store_true', default=False )
-    parser.add_argument( "--live", action='store_true', default=False )
+    parser.add_argument( "--nolive", action='store_true', default=False )
     parser.add_argument( "inputs", type=str, nargs="*" )
 
     args = parser.parse_args()
     args.width, args.height = map( int, args.size.split("x") )
 
     Pause = args.pause
-    ShowLive = args.live
+    ShowAll = args.nolive
     ImgWidth = args.width
     ImgHeight = args.height
     InputFile = args.inputs[0] if len( args.inputs )>0 else None
@@ -703,7 +699,7 @@ def main():
 
     tkMain = Frame(tk, name="main")
     tkMain.pack(fill=BOTH, expand=1)
-    tkMain.master.title("MicroViewer")
+    tkMain.master.title("Live Viewer")
 
     # Within tkMain, use Grid Geometry
     tkHeader = Canvas(tkMain, name="header", height=4+80+4, width=ImgWidth+80)
@@ -773,7 +769,7 @@ def main():
 
         tkMain.pack()
 
-    if ShowFitteSine:
+    if ShowFittedSine:
         tkFitted = Frame(tkMain, name="fitted")
         tkFitted.pack(side=TOP, fill=Y)
 
@@ -795,7 +791,7 @@ def main():
 
     # Within tkMain, use Pack Geometry
     if InputFile and InputFile != '-':
-        tkMain.master.title("MicroViewer - " + InputFile)
+        tkMain.master.title("Live Viewer - " + InputFile)
         tkButton = Button(tkMain, text="Refresh", command=Update)
         tkButton.pack(side=BOTTOM)
     else:
