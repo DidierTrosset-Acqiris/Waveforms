@@ -4,7 +4,7 @@ from sys import stdin, stdout, stderr
 from waveforms import Record
 from waveforms.trace import ReadTrace, OutputTrace
 from argparse import ArgumentParser
-from numpy import array, int8
+from numpy import array, int8, int16
 
 # Takes as input a .trc file, and output a .skew file.
 
@@ -46,11 +46,14 @@ def main():
             try:
                 v = int( values[0] )
             except:
-                xoff, sample = values[0].split( ":" )
-                InitialXOffset = float( xoff )
-                values = [sample]+values[1:]
+                try:
+                    xoff, sample = values[0].split( ":" )
+                    InitialXOffset = float( xoff )
+                    values = [sample]+values[1:]
+                except:
+                    continue
             try:
-                samples = array( list( map( int, values[siStart:siStart+siCount] ) ), dtype=int8 )
+                samples = array( list( map( int, values[siStart:siStart+siCount] ) ), dtype=int16 )
             except:
                 print( "ERROR on line", ri, line, file=stderr )
                 raise

@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
 from sys import stderr
-from numpy import int8, int16, int32, array, zeros, resize
-from waveforms import Record, MultiRecord, _SubRecord
+from numpy import int8, int16, int32, float64, array, zeros, resize
+from waveforms import Record, MultiRecord, DDCMultiRecord, AccMultiRecord
 
 
 """
@@ -17,7 +17,6 @@ for rec in ReadTrace( sys.stdin ):
 
 
 """
-
 
 class TraceHandler:
 
@@ -39,7 +38,7 @@ class TraceHandler:
         self._size = 0
         self._index = 0
         self.dtype = int16
-        self.nbrRecords = 1 # In case there's only one
+        self.nbrChannels = 1
         self.InitialXOffset = 0.0
 
     def trcEnd(self, cont):
@@ -47,7 +46,7 @@ class TraceHandler:
             return
         for i in range( len( self.Waves ) ):
             self.Waves[i].resize( self._index )
-        self.nbrRecords = len( self.Waves )
+        self.nbrChannels = len( self.Waves )
         self.nbrSamples = len( self.Waves[0] )
         self.ActualPoints = self.nbrSamples
         self.Samples = array( self.Waves, dtype=self.dtype, order="C" )
@@ -63,14 +62,17 @@ class TraceHandler:
         if strKey=='#ADCS':
             self.nbrAdc = int(strValue)
         if strKey=='#CHANNELS':
-            self.nbrRecords = int(strValue)
+            self.nbrChannels = int(strValue)
         if strKey=='FULLSCALE':
-            self.FullScale = int(strValue)
-            self.dtype = int32 if self.FullScale==2**32 else int16 if self.FullScale==2**16 else int8
+            self.FullScale = float(strValue)
+            self.dtype = int32 if self.FullScale==2**32 else int16 if self.FullScale==2**16 else int8 if self.FullScale==2**8 else float64
         if strKey=='CHANNELFSR':
             self.channelfsr = float(strValue)
         if strKey=='SAMPIVAL' or strKey=='XIncrement':
             self.XIncrement = float( strValue )
+        if strKey=='AVERAGES':
+            self.ActualAverages = int( strValue )
+            self.dtype = int32
         if strKey=='TEMPERATURES':
             self.temperatures = list( map(int, strValue.split()) )
         if strKey=='HORPOS':
@@ -78,11 +80,15 @@ class TraceHandler:
             self.InitialXOffset = self.InitialXOffset[0]
         if strKey=='InitialXOffset':
             self.InitialXOffset = float( strValue )
+        if strKey=='InitialTimeSeconds':
+            self.InitialXTimeSeconds = float( strValue )
+        if strKey=='InitialTimeFraction':
+            self.InitialXTimeFraction = float( strValue )
 
     def trcSamples(self, strLine):
         if not self.Waves:
             self._size = 1024
-            self.Waves = [ zeros( self._size, dtype=self.dtype ) for _ in range( self.nbrRecords ) ]
+            self.Waves = [ zeros( self._size, dtype=self.dtype ) for _ in range( self.nbrChannels ) ]
         if self._index>=self._size:
             self._size = self._size*2
             for i  in range( len( self.Waves ) ):
@@ -91,7 +97,7 @@ class TraceHandler:
         try:
             values = strLine.split()
             for record, value in enumerate( values ):
-                self.Waves[record][self._index] = int( value )
+                self.Waves[record][self._index] = float( value )
         except:
             stderr.write( "ERROR: '%s'\n"%( strLine ) )
             raise
@@ -299,8 +305,9 @@ def ReadTrace( f ):
                 try:    ScaleFactor = h.channelfsr/h.FullScale
                 except: ScaleFactor = 1.0
                 ScaleOffset = 0.0
-                r = Record()
-                for w in h.Waves:
+                r = Record( FullScale=h.FullScale )
+                if h.Waves:
+                  for w in h.Waves:
                     r.append( ( w, ActualPoints, 0, InitialXOffset, 0.0, 0.0, XIncrement, ScaleFactor, ScaleOffset ) )
                 yield r
     except:
@@ -308,8 +315,8 @@ def ReadTrace( f ):
 
 
 
-def OutputTrace( records, out ):
-    """ Write the given Record or MultiRecord to the given out file object.
+def _test_OutputTrace( records, out ):
+    """ Test the OutputTrace function
 
     >>> from io import StringIO
     >>> samples = array( [ -2243,   3171,   8093,  11667,  13533,  13203,  10973,   6947, \
@@ -413,22 +420,24 @@ def OutputTrace( records, out ):
     >>> o.close()
     """
 
+
+def OutputTrace( records, out ):
+    """ Write the given Record, MultiRecord, DDCMultiRecord, or AccMultiRecord to the given out file object.
+    """
     if isinstance( records, Record ):
         records = [records]
-    if isinstance( records, _SubRecord ):
-        records = [records]
     for rec in records:
-        fullscale = 2**32 if rec[0].Samples.dtype==int32 else 2**16 if rec[0].Samples.dtype==int16 else 2**8
-        #out.write( "$#ADCS %d\n" % adcs )
         out.write( "$#CHANNELS %d\n" % len( rec ) )
         out.write( "$SIGNED %d\n" % 1 )
         out.write( "$FORMATTING DECIMAL\n" )
-        out.write( "$FULLSCALE %d\n" %( fullscale ) )
+        out.write( "$FULLSCALE %f\n" %( rec.FullScale ) )
         out.write( "$MODEL %s\n" % "U5303A" )
         out.write( "$SAMPIVAL %g\n" % rec.XIncrement )
         #out.write( "$CHANNELFSR -1\n" )
         out.write( "$HORPOS %g\n" % rec.InitialXOffset )
         out.write( "$SCALE %g %g\n" %( rec.ScaleOffset, rec.ScaleFactor ) )
+        try: out.write( "$AVERAGES %d\n"%( rec.ActualAverages ) )
+        except: pass
 
         for samples in zip( *rec ):
             out.write( " ".join( map( str, samples ) )+"\n" )
@@ -436,6 +445,7 @@ def OutputTrace( records, out ):
         out.write( "\n" )
 
     out.flush()
+
 
 
 
