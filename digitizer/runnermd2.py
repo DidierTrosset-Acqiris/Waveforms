@@ -3,7 +3,7 @@
 """
     Runs continuous acquisitions
 
-    Copyright (C) Keysight Technologies 2015-2016
+    Copyright (C) Keysight Technologies 2015-2017
    
     Started: August 24th, 2015
     By:      Didier Trosset
@@ -13,7 +13,7 @@
 
 
 from AgMD2 import *
-from waveforms.trace import OutputTrace
+from waveforms.trace import OutputTrace, OutputTraces
 from waveforms import Record, MultiRecord, DDCMultiRecord, AccMultiRecord
 from digitizer.argparser import DigitizerArgs, RefreshArgs
 from sys import stdin, stdout, stderr
@@ -212,6 +212,8 @@ def ApplyArgs( vis, args ):
             if args.vertical_range:  AgMD2_UpdateAttributeViReal64( vi, channel, AGMD2_ATTR_VERTICAL_RANGE,  args.vertical_range )
             if args.vertical_offset: AgMD2_UpdateAttributeViReal64( vi, channel, AGMD2_ATTR_VERTICAL_OFFSET, args.vertical_offset )
 
+        #AgMD2_UpdateAttributeViReal64( vi, "Channel3", AGMD2_ATTR_INPUT_FILTER_MAX_FREQUENCY, 650e6 )
+
         if args.calibration_signal:
             AgMD2_UpdateAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "Signal"+args.calibration_signal )
 
@@ -225,17 +227,25 @@ def ApplyArgs( vis, args ):
         if args.control_io2:
             AgMD2_UpdateAttributeViString( vi, "ControlIO2", AGMD2_ATTR_CONTROL_IO_SIGNAL, args.control_io2 )
 
+#        from random import randint
+#        for ch in [1, 2, 3, 4, 5, 6, 24, 25, 26, 27, 31, 32]:#+[randint(1, 32) for a in range(12)]:
+#            AgMD2_SetAttributeViBoolean( vi, "Channel%d"%ch, AGMD2_ATTR_CHANNEL_ENABLED, False )
+
         AgMD2_ApplySetup( vi )
-        #print( "Firmware:", AgMD2_GetAttributeViString( vi, "", AGMD2_ATTR_INSTRUMENT_FIRMWARE_REVISION, 256 ), file=stderr )
+        print( "Firmware:", AgMD2_GetAttributeViString( vi, "", AGMD2_ATTR_INSTRUMENT_FIRMWARE_REVISION, 256 ), file=stderr )
 
 
 def Calibrate( vis, args, loop ):
     if isinstance( vis, int ):
         vis = [vis]
     for vi in vis:
-        if not AgMD2_GetAttributeViBoolean( vi, "", AGMD2_ATTR_CALIBRATION_IS_REQUIRED ):
-            continue
-        if loop!=0 and args.calibrate_period and loop%args.calibrate_period!=0:
+        calibrate = False
+        if AgMD2_GetAttributeViBoolean( vi, "", AGMD2_ATTR_CALIBRATION_IS_REQUIRED ):
+            calibrate = True
+        if loop==0 or args.calibrate_period and loop%args.calibrate_period==0:
+            calibrate = True
+
+        if not calibrate:
             continue
 
         print( "==> Calibration required.", file=stderr )
@@ -256,18 +266,26 @@ def Acquire( vis, args, queue ):
         if args.tsr:
             # To find whether the acquisition is already started, try to continue it. In case of error, start it.
             try:
-                print( "TSR Continue", file=stderr )
+                #print( "TSR Continue", file=stderr )
                 AgMD2_TSRContinue( vi )
+                overflow = AgMD2_GetAttributeViBoolean( vi, "", AGMD2_ATTR_TSR_MEMORY_OVERFLOW_OCCURRED )
+                if overflow:
+                    _Continue = False
+                    AgMD2_Abort( vi )
+                    print( "ERROR: TSR MEMORY OVERFLOW", file=stderr )
+                    return False
             except:
-                print( "Initiate Acquistion", file=stderr )
+                #print( "\nPress ENTER", file=stderr )
+                #stdin.readline()
+                #print( "Initiate Acquistion", file=stderr )
                 AgMD2_InitiateAcquisition( vi )
 
-            while True:
+            while _Continue:
                 complete = AgMD2_GetAttributeViBoolean( vi, "", AGMD2_ATTR_TSR_IS_ACQUISITION_COMPLETE )
-                print( "GetAttribute TSR_IS_ACQUISITION_COMPLETE :", complete, file=stderr )
+                #print( "GetAttribute TSR_IS_ACQUISITION_COMPLETE :", complete, file=stderr )
                 if complete:
                     return True
-                sleep( 0.2 )
+                #sleep( 0.0001 )
 
         else:
             AgMD2_InitiateAcquisition( vi )
@@ -309,6 +327,7 @@ def FetchChannels( vis, args ):
         vis = [vis]
     for vi in vis:
         # Manages readout
+        nbrAdcBits = AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_INSTRUMENT_INFO_NBR_ADC_BITS )
         if args.mode=='DDC':
             if args.ddc_decimation_numerator==4:
                 DataWidth = 16
@@ -318,13 +337,13 @@ def FetchChannels( vis, args ):
                 Fetch = AgMD2_DDCCoreFetchWaveformInt32Py
             nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, 1, 0, args.read_samples )
 
-            mrec = DDCMultiRecord( checkXOffset=not args.no_check_x_offset )
+            mrec = DDCMultiRecord( checkXOffset=not args.no_check_x_offset, nbrAdcBits=nbrAdcBits )
             mrec.view = args.ddc_sample_view
             for ch in args.read_channels:
                 mrec.append( Fetch( vi, "DDCCore%d"%( ch ), 0, args.read_records, 0, args.read_samples, 2*nbrSamplesToRead, args.read_records ) )
 
             try:
-                OutputTrace( mrec, stdout )
+                OutputTraces( mrec, stdout )
             except BrokenPipeError:
                 _Continue = False
                 break
@@ -338,19 +357,23 @@ def FetchChannels( vis, args ):
                 Fetch = AgMD2_FetchAccumulatedWaveformInt32Py
             nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, 1, 0, args.read_samples )
 
-            mrec = AccMultiRecord( checkXOffset=not args.no_check_x_offset )
+            mrec = AccMultiRecord( checkXOffset=not args.no_check_x_offset, nbrAdcBits=nbrAdcBits+1 )
             for ch in args.read_channels:
-                mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, 2*nbrSamplesToRead, args.read_records ) )
+                #mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
+                fetch = Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records )
+                fetch[1] = args.averages
+                mrec.append( fetch )
 
             try:
-                OutputTrace( mrec, stdout )
+                OutputTraces( mrec, stdout )
+                #print( "$InitialXTimeSeconds", fetch[6][0], file=stdout )
+                #print( "$InitialXTimeFraction", fetch[7][0], file=stdout )
             except BrokenPipeError:
                 _Continue = False
                 break
 
         else:
             if not args.read_type:
-                nbrAdcBits = AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_INSTRUMENT_INFO_NBR_ADC_BITS )
                 args.read_type = 'int8' if nbrAdcBits<=8 else 'int16'
             if args.records<=1:
                 if args.read_type=='int16':
@@ -365,7 +388,7 @@ def FetchChannels( vis, args ):
                 nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, 1, 0, args.read_samples )
 
                 try:
-                    rec = Record()
+                    rec = Record( nbrAdcBits=nbrAdcBits )
                     for ch in args.read_channels:
                         rec.append( Fetch( vi, "Channel%d"%( ch ), nbrSamplesToRead ) )
                 except RuntimeError:
@@ -393,12 +416,12 @@ def FetchChannels( vis, args ):
                     Fetch = AgMD2_FetchMultiRecordWaveformInt8
                 nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, args.read_records, 0, args.read_samples )
 
-                mrec = MultiRecord( checkXOffset=not args.no_check_x_offset ) 
+                mrec = MultiRecord( checkXOffset=not args.no_check_x_offset, NbrAdcBits=nbrAdcBits ) 
                 for ch in args.read_channels:
                     mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
 
                 try:
-                    OutputTrace( mrec, stdout )
+                    OutputTraces( mrec, stdout )
                 except BrokenPipeError:
                     _Continue = False
                     break

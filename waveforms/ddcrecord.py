@@ -2,6 +2,7 @@
 
 from numpy import pi, int16, int32, array, zeros, resize, fromfunction, sqrt, arctan2
 from sys import stderr
+from waveforms.trace import ReadTrace
 
 
 class _DDCMultiWaveform():
@@ -52,7 +53,7 @@ class _DDCMultiWaveform():
             raise RuntimeError( "Bad number of InitialXTimeFraction." )
         self.fetch = fetch
         self.SampleArray          = self.fetch[0]
-        self.NumRecords           = self.fetch[1]
+        self.ActualRecords        = self.fetch[1]
         self.ActualPoints         = self.fetch[2]
         self.FirstValidPoint      = self.fetch[3]
         self.InitialXOffset       = self.fetch[4]
@@ -72,7 +73,7 @@ class _DDCMultiWaveform():
 
 class _DDCSubWaveform:
     def __init__( self, mwfm, index, view ):
-        if index<0 or index>=mwfm.NumRecords:
+        if index<0 or index>=mwfm.ActualRecords:
             raise IndexError( "index out of bounds" )
         self.mwfm = mwfm
         self.index = index
@@ -177,6 +178,10 @@ class _DDCSubRecord:
         return _DDCSubWaveform( self.mrec.mwfms[index], self.index, self.view )
 
     @property
+    def NbrAdcBits( self ):
+        return self.mrec.NbrAdcBits
+
+    @property
     def ActualPoints( self ):
         return self.mrec.mwfms[0].ActualPoints[self.index]
 
@@ -197,18 +202,14 @@ class _DDCSubRecord:
         return self.mrec.mwfms[0].XIncrement
 
     @property
-    def ScaleFactor( self ):
-        return self.mrec.mwfms[0].ScaleFactor
-
-    @property
-    def ScaleOffset( self ):
-        return self.mrec.mwfms[0].ScaleOffset
-
-    @property
     def FullScale( self ):
         if self.view=='PHASE':
             return 2*pi
         return 2**32 if self.mrec.mwfms[0].SampleArray.dtype==int32 else 2**16 if self.mrec.mwfms[0].SampleArray.dtype==int16 else 2**8
+
+    @property
+    def TraceType( self ):
+        return self.mrec.TraceType
 
 
 class DDCMultiRecord():
@@ -259,7 +260,9 @@ class DDCMultiRecord():
 
     """
 
-    def __init__( self, fetch=None, checkXOffset=True  ):
+    def __init__( self, fetch=None, checkXOffset=True, nbrAdcBits=None ):
+        self.TraceType = "DDCRecord"
+        self.NbrAdcBits = nbrAdcBits
         self._view = 'REAL'
         self.checkXOffset = checkXOffset
         self.mwfms = []
@@ -271,21 +274,21 @@ class DDCMultiRecord():
                 self.append( fetch )
 
     def __len__( self ):
-        return self.NumRecords
+        return self.ActualRecords
 
     def __getitem__( self, index ):
         return _DDCSubRecord( self, index, self._view )
 
     @property
-    def NumRecords( self ):
-        return self.mwfms[0].NumRecords
+    def ActualRecords( self ):
+        return self.mwfms[0].ActualRecords
 
     def append( self, fetch ):
         mwfm = _DDCMultiWaveform( fetch )
-        if len( self.mwfms )>0 and self.mwfms[0].NumRecords != mwfm.NumRecords:
-            raise RuntimeError( "NumRecords do not match." )
+        if len( self.mwfms )>0 and self.mwfms[0].ActualRecords != mwfm.ActualRecords:
+            raise RuntimeError( "ActualRecords do not match." )
         if len( self.mwfms )>0:
-            for r in range( mwfm.NumRecords ):
+            for r in range( mwfm.ActualRecords ):
                 if self.mwfms[0].ActualPoints[r] != mwfm.ActualPoints[r]:
                     raise RuntimeError( "ActualPoints do not match." )
                 if self.checkXOffset:
@@ -316,6 +319,88 @@ class DDCMultiRecord():
         if view not in ['REAL', 'IMAGINARY', 'COMPLEX', 'MAGNITUDE', 'PHASE']:
             raise RuntimeError( "DDCWaveform view type must be REAL, IMAGINARY, COMPLEX, MAGNITUDE, or PHASE" )
         self._view = view
+
+
+
+def ReadDDCRecords( f ):
+    """ Read DDCRecord objects from a file
+
+    >>> from io import StringIO
+    >>> trace = '''$TraceType DDCRecord
+    ... $SampleType Int16
+    ... $ActualChannels 2
+    ... $Model U5303A
+    ... $XIncrement 6.25e-10
+    ... $InitialXOffset -7.93457e-11
+    ... $InitialXTimeSeconds 0.0
+    ... $InitialXTimeFraction 0.002
+    ... $$ScaleFactor 0 6.103515625e-05
+    ... $$ScaleOffset 0 0.0
+    ... $$ScaleFactor 1 3.0517578125e-05
+    ... $$ScaleOffset 1 0.0
+    ... -2243 -5486  
+    ... 3171  -18    
+    ... 8093  5394   
+    ... 11667 9902   
+    ... 13533 12962  
+    ... 13203 13966  
+    ... 10973 12850  
+    ... 6947  9598   
+    ... 1869  5074   
+    ... -3485 -370   
+    ... -8403 -5742  
+    ... -11933 -10242
+    ... -13571 -13118
+    ... -13213 -14034
+    ... -10755 -12734
+    ... -6573 -9378  
+    ... -1427 -4670  
+    ... 4019  846    
+    ... 8701  6162   
+    ... 12067 10542  
+    ... 13581 13250  
+    ... 12979 13918  
+    ... 10429 12482  
+    ... 6195  8926   
+    ... 1053  4258   
+    ... -4333 -1202  
+    ... -9011 -6542  
+    ... -12349 -10818
+    ... -13667 -13406
+    ... -12941 -13938
+    ... -10179 -12366
+    ... -5757 -8770
+    ... '''
+    >>> f = StringIO( trace )
+    >>> recs = ReadDDCRecords( f )
+    >>> rec = next( recs )
+    >>> print( len( rec ), rec.ActualPoints, rec.InitialXOffset, rec.InitialXTimeSeconds, rec.InitialXTimeFraction, rec.XIncrement )
+    2 16 -7.93457e-11 0.0 0.002 6.25e-10
+    >>> wfm = rec[0]
+    >>> print( wfm.ActualPoints, wfm.InitialXOffset, wfm.InitialXTimeSeconds, wfm.InitialXTimeFraction, wfm.XIncrement, wfm.ScaleFactor, wfm.ScaleOffset )
+    16 -7.93457e-11 0.0 0.002 6.25e-10 6.103515625e-05 0.0
+    >>> print( wfm.Samples )
+    [ -2243   8093  13533  10973   1869  -8403 -13571 -10755  -1427   8701
+      13581  10429   1053  -9011 -13667 -10179]
+    >>> wfm = rec[1]
+    >>> print( wfm.ActualPoints, wfm.InitialXOffset, wfm.InitialXTimeSeconds, wfm.InitialXTimeFraction, wfm.XIncrement, wfm.ScaleFactor, wfm.ScaleOffset )
+    16 -7.93457e-11 0.0 0.002 6.25e-10 3.0517578125e-05 0.0
+    >>> print( wfm.Samples )
+    [ -5486   5394  12962  12850   5074  -5742 -13118 -12734  -4670   6162
+      13250  12482   4258  -6542 -13406 -12366]
+    >>> wfm.view = "IMAGINARY"
+    >>> print( wfm.ActualPoints, wfm.InitialXOffset, wfm.InitialXTimeSeconds, wfm.InitialXTimeFraction, wfm.XIncrement, wfm.ScaleFactor, wfm.ScaleOffset )
+    16 -7.93457e-11 0.0 0.002 6.25e-10 3.0517578125e-05 0.0
+    >>> print( wfm.Samples )
+    [   -18   9902  13966   9598   -370 -10242 -14034  -9378    846  10542
+      13918   8926  -1202 -10818 -13938  -8770]
+    """
+    for trc in ReadTrace( f ):
+        record = DDCMultiRecord()
+        record.SampleType = trc.SampleType
+        for wfm in trc:
+            record.append( ( wfm.Samples, 1, [trc.ActualPoints//2], [0], [trc.InitialXOffset], [trc.InitialXTimeSeconds], [trc.InitialXTimeFraction], trc.XIncrement, wfm.ScaleFactor, wfm.ScaleOffset, [0] ) )
+        yield record[0]
 
 
 

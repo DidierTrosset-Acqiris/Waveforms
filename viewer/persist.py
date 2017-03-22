@@ -44,20 +44,17 @@ def main():
         traces = [open( name, 'rt' ) for name in args.files]
 
     for trace in traces:
-        for Wfms in ReadTrace( trace ):
-            try:
-                for c, Wfm in r_enumerate( Wfms ):
-                    for i in range( len(Wfm) ):
-                        time = Wfm.InitialXOffset+i*Wfm.XIncrement
-                        sample = Wfm[i]
-                        x = int( ( -offset+time )/length*width )
-                        y = height//2-int( sample/scale*height )
-                        if x>width:
-                            break
-                        if 0<=x<width and 0<=y<height:
-                            bmp[y, x] = CC[c]
-            except:
-                pass
+        for record in ReadTrace( trace ):
+            for c, waveform in r_enumerate( record ):
+                for i in range( len(waveform) ):
+                    time = record.InitialXOffset+i*record.XIncrement
+                    sample = waveform[i]
+                    x = int( ( -offset+time )/length*width )
+                    y = height//2-int( sample/scale*height )
+                    if x>width:
+                        break
+                    if 0<=x<width and 0<=y<height:
+                        bmp[y, x] = CC[c]
 
     pyplot.xlabel( "Time (ns)" )
     pyplot.xticks( [0, width-1], ["%g"%(offset*1e9), "%g"%(( offset+length )*1e9)] )

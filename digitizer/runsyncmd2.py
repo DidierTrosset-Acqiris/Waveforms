@@ -3,7 +3,7 @@
 """
     Runs continuous acquisitions in synchronized M9730B instruments
 
-    Copyright (C) Keysight Technologies 2015-2016
+    Copyright (C) Keysight Technologies 2015-2017
    
     Started: April 16th, 2013
     By:      Didier Trosset
@@ -14,7 +14,7 @@
 from __future__ import print_function
 
 from AgMD2 import *
-from waveforms.trace import OutputTrace
+from waveforms.trace import OutputTraces
 from waveforms import MultiRecord, DDCMultiRecord
 from digitizer.argparser import DigitizerParser, DigitizerArgs
 #from UtilsAgMD2 import Waveform, Waveforms
@@ -350,7 +350,7 @@ def RunSyncAcq():
 
             else:
                 try:
-                    OutputTrace( mrec, sys.stdout )
+                    OutputTraces( mrec, sys.stdout )
                 except BrokenPipeError:
                     _Continue = False
                     break

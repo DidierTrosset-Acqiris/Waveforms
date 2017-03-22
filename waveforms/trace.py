@@ -2,7 +2,7 @@
 
 from sys import stderr
 from numpy import int8, int16, int32, float64, array, zeros, resize
-from waveforms import Record, MultiRecord, DDCMultiRecord, AccMultiRecord
+from waveforms.singlerecord import Record
 
 
 """
@@ -10,7 +10,7 @@ This is how to use the Trace module. Of course, effective use will not
 define the text of the file content, but read it from an actual file!
 
 record = Record( AgMD2_FetchWaveformViInt16( Vi, ... ) )
-OutputTrace( record, out=sys.stdout )
+OutputTrace( record, file=sys.stdout )
 
 for rec in ReadTrace( sys.stdin ):
     # Do what you want with the record ...
@@ -18,12 +18,77 @@ for rec in ReadTrace( sys.stdin ):
 
 """
 
+class Trace:
+    """ Abstract Trace class used to hold coherent series of values.
+    """
+    class Wave:
+        def __init__( self ):
+            self.Samples = None
+
+        def __len__( self ):
+            return len( self.Samples )
+
+        def __getitem__( self, index ):
+            return self.Samples[index]
+
+        def __iter__( self ):
+            return iter( self.Samples )
+
+    def __init__( self ):
+        self.Waves = []
+
+    def __len__( self ):
+        return len( self.Waves )
+
+    def __getitem__( self, index ):
+        return self.Waves[index]
+
+    def __iter__( self ):
+        return iter( self.Waves )
+
+
+def SampleType( dataType ):
+    if dataType==int32:
+        return "Int32"
+    elif dataType==int16:
+        return "Int16"
+    elif dataType==int8:
+        return "Int8"
+    elif dataType==float64:
+        return "Real64"
+    else:
+        raise RuntimeError( "ERROR: Unknown sample type "+str( dataType )+"." )
+
+def DataType( sampleType ):
+    if sampleType=="Int32":
+        return int32
+    elif sampleType=="Int16":
+        return int16
+    elif sampleType=="Int8":
+        return int8
+    elif sampleType=="Real64":
+        return float64
+    else:
+        raise RuntimeError( "ERROR: Unknown sample type "+str( SampleType )+"." )
+
+def FullScale( sampleType ):
+    if sampleType=="Int32":
+        return 2**32
+    elif sampleType=="Int16":
+        return 2**16
+    elif sampleType=="Int8":
+        return 2**8
+    elif sampleType=="Real64":
+        return 1.0
+    else:
+        raise RuntimeError( "ERROR: Unknown sample type "+str( SampleType )+"." )
+
 class TraceHandler:
 
-    def __init__(self):
+    def __init__( self ):
         self.keep_line = None 
         self.is_valid = False
-        self.FullScale = 65536
+        self.trace = None
         pass
 
     def SetKeepLine( self, line ):
@@ -38,69 +103,106 @@ class TraceHandler:
         self.Waves = None
         self._size = 0
         self._index = 0
+        self._chans = 0
+        self.stype = int
         self.dtype = int16
-        self.nbrChannels = 1
-        self.InitialXOffset = 0.0
+        self.FullScale = 65536
 
     def trcEnd(self, cont):
         if self._size==0 or not self.Waves or self._index==0:
             return
+        while len( self.trace.Waves )<len( self.Waves ):
+            self.trace.Waves.append( Trace.Wave() )
         for i in range( len( self.Waves ) ):
             self.Waves[i].resize( self._index )
-        self.nbrChannels = len( self.Waves )
-        self.nbrSamples = len( self.Waves[0] )
-        self.ActualPoints = self.nbrSamples
-        self.Samples = array( self.Waves, dtype=self.dtype, order="C" )
+            self.trace.Waves[i].Samples = self.Waves[i]
+        self.trace.ActualChannels = len( self.trace.Waves )
+        self.trace.ActualPoints = len( self.trace.Waves[0].Samples )
         self.is_valid = True
 
     def trcAttribute(self, strKey, strValue):
-        if strKey=='MODEL':
-            self.model = str(strValue)
-        if strKey=='COUNTER':
-            self.counter = int(strValue)
-        if strKey=='FPGAIDS':
-            self.fpgaids = map(str, strValue.split())
-        if strKey=='#ADCS':
-            self.nbrAdc = int(strValue)
-        if strKey=='#CHANNELS':
-            self.nbrChannels = int(strValue)
-        if strKey=='FULLSCALE':
-            self.FullScale = float(strValue) if float(strValue)!=int(strValue) else int(strValue)
-            self.dtype = int32 if self.FullScale==2**32 else int16 if self.FullScale==2**16 else int8 if self.FullScale==2**8 else float64
-        if strKey=='CHANNELFSR':
-            self.channelfsr = float(strValue)
-        if strKey=='SAMPIVAL' or strKey=='XIncrement':
-            self.XIncrement = float( strValue )
-        if strKey=='AVERAGES':
-            self.ActualAverages = int( strValue )
-            self.dtype = int32
-        if strKey=='TEMPERATURES':
-            self.temperatures = list( map(int, strValue.split()) )
-        if strKey=='HORPOS':
-            self.InitialXOffset = list( map( float, strValue.split() ) )
-            self.InitialXOffset = self.InitialXOffset[0]
-        if strKey=='InitialXOffset':
-            self.InitialXOffset = float( strValue )
-        if strKey=='InitialTimeSeconds':
-            self.InitialXTimeSeconds = float( strValue )
-        if strKey=='InitialTimeFraction':
-            self.InitialXTimeFraction = float( strValue )
+        if strKey=='TraceType':
+            self.trace.TraceType = strValue
+        elif strKey=='SampleType':
+            self.sampleType = strValue
+            self.trace.SampleType = strValue
+        elif strKey=='FULLSCALE':
+            self.sampleType = "Int8" if strValue=="256" else "Int16" if strValue=="65536" else "Int32"
+            self.trace.SampleType = self.sampleType
+        elif strKey=='Model':
+            self.trace.Model = strValue
+        elif strKey=='SINEFREQ' or strKey=='SineFreq':
+            self.trace.SineFreq = float( strValue )
+        elif strKey=='Counter':
+            self.trace.counter = int( strValue )
+        elif strKey=='#ADCS':
+            pass
+        elif strKey=='#CHANNELS' or strKey=='ActualChannels':
+            self.trace.ActualChannels = int(strValue)
+        elif strKey=='FullScale':
+            self.trace.FullScale = float(strValue) if float(strValue)!=int(strValue) else int(strValue)
+        elif strKey=='NbrAdcBits':
+            self.trace.NbrAdcBits = int(strValue)
+        elif strKey=='SAMPIVAL' or strKey=='XIncrement':
+            self.trace.XIncrement = float( strValue )
+        elif strKey=='ActualAverages':
+            self.trace.ActualAverages = int( strValue )
+        elif strKey=='HORPOS':
+            self.trace.InitialXOffset = float( strValue )
+        elif strKey=='InitialXOffset':
+            self.trace.InitialXOffset = float( strValue )
+        elif strKey=='InitialTimeSeconds':
+            self.trace.InitialXTimeSeconds = float( strValue )
+        elif strKey=='InitialTimeFraction':
+            self.trace.InitialXTimeFraction = float( strValue )
+        else:
+            try:
+                setattr( self.trace, strKey, strValue )
+            except:
+                print( "ERROR:", "Cannot process attribute", strKey, "value", strValue, file=stderr )
+
+    def trcWaveAttribute(self, index, strKey, strValue):
+        assert index>=0
+        while len( self.trace.Waves )<=index:
+            self.trace.Waves.append( Trace.Wave() )
+        if strKey=='ScaleFactor':
+            self.trace.Waves[index].ScaleFactor = float( strValue )
+        elif strKey=='ScaleOffset':
+            self.trace.Waves[index].ScaleOffset = float( strValue )
+        else:
+            try:
+                setattr( self.trace.Waves[index], strKey, strValue )
+            except:
+                print( "ERROR:", "Cannot process attribute", strKey, "index", index, "value", strValue, file=stderr )
+
+    def _initWaves( self, sampleType, nbrChannels ):
+        assert self.Waves is None
+        self._dtype = DataType( sampleType )
+        self._stype = float if self.dtype==float64 else int
+        self._size = 1024
+        self._index = 0
+        self._chans = nbrChannels
+        self.Waves = [ zeros( self._size, dtype=self._dtype ) for _ in range( self._chans ) ]
+
+    def _resizeWaves( self ):
+        assert self.Waves is not None
+        assert self._stype is not None
+        assert self._dtype is not None
+        self._size = self._size*2
+        for i in range( len( self.Waves ) ):
+            self.Waves[i].resize( self._size )
 
     def trcSamples(self, strLine):
+        values = strLine.split()
         if not self.Waves:
-            self._size = 1024
-            self.Waves = [ zeros( self._size, dtype=self.dtype ) for _ in range( self.nbrChannels ) ]
+            self._initWaves( self.sampleType, len( values ) )
         if self._index>=self._size:
-            self._size = self._size*2
-            for i  in range( len( self.Waves ) ):
-                self.Waves[i].resize( self._size )
-            #self.Waves = [resize( wave, self._size ) for wave in self.Waves]
+            self._resizeWaves()
         try:
-            values = strLine.split()
             for record, value in enumerate( values ):
-                self.Waves[record][self._index] = float( value )
+                self.Waves[record][self._index] = self._stype( value )
         except:
-            stderr.write( "ERROR: '%s'\n"%( strLine ) )
+            print( "ERROR:", "Cannot understand samples", strLine, file=stderr )
             raise
         finally:
             self._index = self._index+1
@@ -110,6 +212,7 @@ class TraceHandler:
 def ParseTrace( input, handler ):
     EOF = True
     FS = chr(28)
+    handler.trace = Trace()
     handler.trcBegin()
 
     isInSamples = False
@@ -137,7 +240,11 @@ def ParseTrace( input, handler ):
             continue
 
         # Interpret the line
-        if line[0] == "$":
+        if line[0]=="$" and line[1]=="$":
+            line = line[2:]
+            key, index, value = line.split( None, maxsplit=2 )
+            handler.trcWaveAttribute( int( index ), key, value )
+        elif line[0]=="$":
             line = line[1:]
             key, value = line.split( None, maxsplit=1 )
             handler.trcAttribute( key, value )
@@ -146,7 +253,7 @@ def ParseTrace( input, handler ):
             handler.trcSamples( line )
             
     handler.trcEnd(cont = not EOF)
-    return not EOF
+    return handler.trace, not EOF
 
 
 
@@ -157,16 +264,19 @@ def _test_ReadTrace( f ):
     define the text of the file content, but read it from an actual file!
 
     >>> from io import StringIO
-    >>> trace = '''$#ADCS 1
-    ... $#CHANNELS 2
-    ... $SIGNED 1
-    ... $FORMATTING DECIMAL
-    ... $FULLSCALE 65536
-    ... $MODEL M9703A
-    ... $SERIALNO CH00085346
-    ... $SAMPIVAL 6.25e-10
-    ... $CHANNELFSR 1
-    ... $HORPOS -7.93457e-11
+    >>> trace = '''$TraceType Digitizer
+    ... $ActualChannels 2
+    ... $SampleType Int16
+    ... $FullScale 65536
+    ... $Model M9703B
+    ... $XIncrement 6.25e-10
+    ... $InitialXOffset -7.93457e-11
+    ... $InitialXTimeSeconds 0.0
+    ... $InitialXTimeFraction 0.002
+    ... $$ScaleFactor 0 1.52587890625e-05
+    ... $$ScaleOffset 0 0.0
+    ... $$ScaleFactor 1 1.52587890625e-05
+    ... $$ScaleOffset 1 0.0
     ... -2243 -5486  
     ... 3171  -18    
     ... 8093  5394   
@@ -201,27 +311,30 @@ def _test_ReadTrace( f ):
     ... -5757 -8770
     ... '''
     >>> f = StringIO( trace )
-    >>> for rec in ReadTrace( f ):
-    ...    print( len( rec ) )
-    ...    print( len( rec ), rec.ActualPoints, rec.XIncrement, rec.ScaleFactor, rec.ScaleOffset )
-    ...    for w in rec:
-    ...        print( w.ActualPoints, w.InitialXOffset, w.InitialXTimeSeconds, w.InitialXTimeFraction, w.XIncrement, w.ScaleFactor, w.ScaleOffset )
-    ...        print( w.Samples )
+    >>> for trc in ReadTrace( f ):
+    ...    print( len( trc.Waves ) )
+    ...    print( trc.ActualChannels, trc.ActualPoints, trc.InitialXOffset, trc.InitialXTimeSeconds, trc.InitialXTimeFraction, trc.XIncrement )
+    ...    for wfm in trc:
+    ...        print( wfm.ScaleFactor, wfm.ScaleOffset )
+    ...        print( wfm.Samples )
     2
-    2 32 6.25e-10 1.52587890625e-05 0.0
-    32 -7.93457e-11 0.0 0.0 6.25e-10 1.52587890625e-05 0.0
+    2 32 -7.93457e-11 0.0 0.002 6.25e-10
+    1.52587890625e-05 0.0
     [ -2243   3171   8093  11667  13533  13203  10973   6947   1869  -3485
       -8403 -11933 -13571 -13213 -10755  -6573  -1427   4019   8701  12067
       13581  12979  10429   6195   1053  -4333  -9011 -12349 -13667 -12941
      -10179  -5757]
-    32 -7.93457e-11 0.0 0.0 6.25e-10 1.52587890625e-05 0.0
+    1.52587890625e-05 0.0
     [ -5486    -18   5394   9902  12962  13966  12850   9598   5074   -370
       -5742 -10242 -13118 -14034 -12734  -9378  -4670    846   6162  10542
       13250  13918  12482   8926   4258  -1202  -6542 -10818 -13406 -13938
      -12366  -8770]
-    >>> trace = '''$#CHANNELS 2
-    ... $SAMPIVAL 6.25e-10
-    ... $HORPOS -7.93457e-11
+    >>> trace = '''$TraceType Digitizer
+    ... $ActualChannels 2
+    ... $SampleType Int16
+    ... $FullScale 65536
+    ... $XIncrement 6.25e-10
+    ... $InitialXOffset -7.93456e-11
     ... -2243 -5486  
     ... 3171  -18    
     ... 8093  5394   
@@ -231,9 +344,12 @@ def _test_ReadTrace( f ):
     ... 10973 12850  
     ... 6947  9598   
     ...
-    ... $#CHANNELS 2
-    ... $SAMPIVAL 6.25e-10
-    ... $HORPOS -7.93457e-11
+    ... $TraceType Digitizer
+    ... $ActualChannels 2
+    ... $SampleType Int16
+    ... $FullScale 65536
+    ... $XIncrement 6.25e-10
+    ... $InitialXOffset -7.93457e-11
     ... 1869  5074   
     ... -3485 -370   
     ... -8403 -5742  
@@ -243,9 +359,12 @@ def _test_ReadTrace( f ):
     ... -10755 -12734
     ... -6573 -9378  
     ...
-    ... $#CHANNELS 2
-    ... $SAMPIVAL 6.25e-10
-    ... $HORPOS -7.93457e-11
+    ... $TraceType Digitizer
+    ... $ActualChannels 2
+    ... $SampleType Int16
+    ... $FullScale 65536
+    ... $XIncrement 6.25e-10
+    ... $InitialXOffset -7.93458e-11
     ... -1427 -4670  
     ... 4019  846    
     ... 8701  6162   
@@ -255,9 +374,12 @@ def _test_ReadTrace( f ):
     ... 10429 12482  
     ... 6195  8926   
     ...
-    ... $#CHANNELS 2
-    ... $SAMPIVAL 6.25e-10
-    ... $HORPOS -7.93457e-11
+    ... $TraceType Digitizer
+    ... $ActualChannels 2
+    ... $SampleType Int16
+    ... $FullScale 65536
+    ... $XIncrement 6.25e-10
+    ... $InitialXOffset -7.93459e-11
     ... 1053  4258   
     ... -4333 -1202  
     ... -9011 -6542  
@@ -268,61 +390,43 @@ def _test_ReadTrace( f ):
     ... -5757 -8770
     ... '''
     >>> f = StringIO( trace )
-    >>> for rec in ReadTrace( f ):
-    ...    print( len( rec ) )
-    ...    for w in rec:
-    ...        print( w.ActualPoints, w.InitialXOffset, w.InitialXTimeSeconds, w.InitialXTimeFraction, w.XIncrement, w.ScaleFactor, w.ScaleOffset )
-    ...        print( w.Samples )
+    >>> for trc in ReadTrace( f ):
+    ...    print( len( trc.Waves ) )
+    ...    print( trc.ActualChannels, trc.ActualPoints, trc.InitialXOffset, trc.XIncrement )
+    ...    for wfm in trc:
+    ...        print( wfm.Samples )
     2
-    8 -7.93457e-11 0.0 0.0 6.25e-10 1.0 0.0
+    2 8 -7.93456e-11 6.25e-10
     [-2243  3171  8093 11667 13533 13203 10973  6947]
-    8 -7.93457e-11 0.0 0.0 6.25e-10 1.0 0.0
     [-5486   -18  5394  9902 12962 13966 12850  9598]
     2
-    8 -7.93457e-11 0.0 0.0 6.25e-10 1.0 0.0
+    2 8 -7.93457e-11 6.25e-10
     [  1869  -3485  -8403 -11933 -13571 -13213 -10755  -6573]
-    8 -7.93457e-11 0.0 0.0 6.25e-10 1.0 0.0
     [  5074   -370  -5742 -10242 -13118 -14034 -12734  -9378]
     2
-    8 -7.93457e-11 0.0 0.0 6.25e-10 1.0 0.0
+    2 8 -7.93458e-11 6.25e-10
     [-1427  4019  8701 12067 13581 12979 10429  6195]
-    8 -7.93457e-11 0.0 0.0 6.25e-10 1.0 0.0
     [-4670   846  6162 10542 13250 13918 12482  8926]
     2
-    8 -7.93457e-11 0.0 0.0 6.25e-10 1.0 0.0
+    2 8 -7.93459e-11 6.25e-10
     [  1053  -4333  -9011 -12349 -13667 -12941 -10179  -5757]
-    8 -7.93457e-11 0.0 0.0 6.25e-10 1.0 0.0
     [  4258  -1202  -6542 -10818 -13406 -13938 -12366  -8770]
     """
 
 
 def ReadTrace( f ):
     """ Read a trace from a file """
-    h = TraceHandler()
     keepon = True
-    try:
-        while keepon:
-            keepon = ParseTrace( f, h )
-            if h.is_valid:
-                ActualPoints = h.ActualPoints
-                InitialXOffset = h.InitialXOffset
-                InitialXTimeSeconds = 0.0
-                InitialXTimeFraction = 0.0
-                XIncrement = h.XIncrement
-                try:    ScaleFactor = h.channelfsr/h.FullScale
-                except: ScaleFactor = 1.0
-                ScaleOffset = 0.0
-                r = Record( FullScale=h.FullScale )
-                if h.Waves:
-                  for w in h.Waves:
-                    r.append( ( w, ActualPoints, 0, InitialXOffset, 0.0, 0.0, XIncrement, ScaleFactor, ScaleOffset ) )
-                yield r
-    except:
-        raise
+    handler = TraceHandler()
+    while keepon:
+        trace, keepon = ParseTrace( f, handler )
+        if not handler.is_valid:
+            continue
+        yield trace
 
 
 
-def _test_OutputTrace( records, out ):
+def _test_OutputTrace( records, file ):
     """ Test the OutputTrace function
 
     >>> from io import StringIO
@@ -331,18 +435,23 @@ def _test_OutputTrace( records, out ):
                            -1427,   4019,   8701,  12067,  13581,  12979,  10429,   6195, \
                             1053,  -4333,  -9011, -12349, -13667, -12941, -10179,  -5757], dtype=int16 )
     >>> r = Record( ( samples, 30, 0, -7e-11, 0.0, 2e-3, 6.25e-10, 2.0/32768, 0.0 ) )
-    >>> r.append(   ( samples, 30, 2, -7e-11, 0.0, 2e-3, 6.25e-10, 2.0/32768, 0.0 ) )
+    >>> r.append(   ( samples, 30, 2, -7e-11, 0.0, 2e-3, 6.25e-10, 1.0/32768, 0.0 ) )
     >>> o = StringIO()
-    >>> OutputTrace( r, out=o )
+    >>> OutputTrace( r, file=o, Model="U5303A" )
     >>> print( o.getvalue() )
-    $#CHANNELS 2
-    $SIGNED 1
-    $FORMATTING DECIMAL
-    $FULLSCALE 65536
-    $MODEL U5303A
-    $SAMPIVAL 6.25e-10
-    $HORPOS -7e-11
-    $SCALE 0 6.10352e-05
+    $TraceType Digitizer
+    $SampleType Int16
+    $FullScale 65536
+    $ActualChannels 2
+    $Model U5303A
+    $XIncrement 6.25e-10
+    $InitialXOffset -7e-11
+    $InitialXTimeSeconds 0.0
+    $InitialXTimeFraction 0.002
+    $$ScaleFactor 0 6.103515625e-05
+    $$ScaleOffset 0 0.0
+    $$ScaleFactor 1 3.0517578125e-05
+    $$ScaleOffset 1 0.0
     -2243 8093
     3171 11667
     8093 13533
@@ -376,96 +485,40 @@ def _test_OutputTrace( records, out ):
     <BLANKLINE>
     <BLANKLINE>
     >>> o.close()
-    >>> mr = MultiRecord( ( samples, 32, 2, [12, 12], [0, 16], [-7e-11, -3e-11], [0.0, 0.0], [2e-3, 3e-3], 6.25e-10, 2.0/32768, 0.0 ) )
-    >>> mr.append(        ( samples, 32, 2, [12, 12], [1, 17], [-7e-11, -3e-11], [0.0, 0.0], [2e-3, 3e-3], 6.25e-10, 2.0/32768, 0.0 ) )
-    >>> o = StringIO()
-    >>> OutputTrace( mr, out=o )
-    >>> print( o.getvalue() )
-    $#CHANNELS 2
-    $SIGNED 1
-    $FORMATTING DECIMAL
-    $FULLSCALE 65536
-    $MODEL U5303A
-    $SAMPIVAL 6.25e-10
-    $HORPOS -7e-11
-    $SCALE 0 6.10352e-05
-    -2243 3171
-    3171 8093
-    8093 11667
-    11667 13533
-    13533 13203
-    13203 10973
-    10973 6947
-    6947 1869
-    1869 -3485
-    -3485 -8403
-    -8403 -11933
-    -11933 -13571
-    <BLANKLINE>
-    $#CHANNELS 2
-    $SIGNED 1
-    $FORMATTING DECIMAL
-    $FULLSCALE 65536
-    $MODEL U5303A
-    $SAMPIVAL 6.25e-10
-    $HORPOS -3e-11
-    $SCALE 0 6.10352e-05
-    -1427 4019
-    4019 8701
-    8701 12067
-    12067 13581
-    13581 12979
-    12979 10429
-    10429 6195
-    6195 1053
-    1053 -4333
-    -4333 -9011
-    -9011 -12349
-    -12349 -13667
-    <BLANKLINE>
-    <BLANKLINE>
-    >>> o.close()
     """
 
 
-def OutputTrace( records, out, Model=None ):
-    """ Write the given Record, MultiRecord, DDCMultiRecord, or AccMultiRecord to the given out file object.
+def OutputTraces( traces, file, Model=None ):
+    for trace in traces:
+        OutputTrace( trace, file=file, Model=Model )
+
+
+def OutputTrace( trace, file, Model=None ):
+    """ Write the given Trace to the given file object.
     """
-    if isinstance( records, Record ):
-        records = [records]
-    for rec in records:
-        #print( "$RecordType", "Digitizer", file=out )
-        #print( "$ActualChannels", len( rec ), file=out )
-        #print( "$SampleType", "Int32", file=out )
-        #print( "$FullScale", rec.FullScale, file=out )
-        #if Model: print( "$Model", Model, file=out )
-        #print( "$XIncrement", rec.XIncrement, file=out )
-        #print( "$InitialXOffset", rec.InitialXOffset, file=out )
-        #print( "$InitialXTimeSeconds", rec.InitialXTimeSeconds, file=out )
-        #print( "$InitialXTimeFraction", rec.InitialXTimeFraction, file=out )
-        #print( "$ScaleFactor", rec.ScaleFactor, file=out )
-        #print( "$ScaleOffset", rec.ScaleOffset, file=out )
-        #try: print( "$ActualAverages", rec.ActualAverages, file=out )
-        #except: pass
+    sampleType = getattr( trace, 'SampleType', SampleType( trace[0].Samples.dtype ) )
+    print( "$TraceType", trace.TraceType, file=file )
+    print( "$SampleType", sampleType, file=file )
+    if hasattr( trace, 'NbrAdcBits' ) and trace.NbrAdcBits: print( "$NbrAdcBits", trace.NbrAdcBits, file=file )
+    if hasattr( trace, 'FullScale' ) and trace.FullScale: print( "$FullScale", trace.FullScale, file=file )
+    print( "$ActualChannels", len( trace ), file=file )
+    if Model: print( "$Model", Model, file=file )
+    print( "$XIncrement", trace.XIncrement, file=file )
+    print( "$InitialXOffset", trace.InitialXOffset, file=file )
+    print( "$InitialXTimeSeconds", trace.InitialXTimeSeconds, file=file )
+    print( "$InitialXTimeFraction", trace.InitialXTimeFraction, file=file )
+    for index, wave in enumerate( trace ):
+        print( "$$ScaleFactor", index, wave.ScaleFactor, file=file )
+        print( "$$ScaleOffset", index, wave.ScaleOffset, file=file )
+    try: print( "$ActualAverages", trace.ActualAverages, file=file )
+    except: pass
 
-        out.write( "$#CHANNELS %d\n" % len( rec ) )
-        out.write( "$SIGNED %d\n" % 1 )
-        out.write( "$FORMATTING DECIMAL\n" )
-        out.write( "$FULLSCALE "+str( rec.FullScale )+"\n" )
-        out.write( "$MODEL %s\n" % "U5303A" )
-        out.write( "$SAMPIVAL %g\n" % rec.XIncrement )
-        #out.write( "$CHANNELFSR -1\n" )
-        out.write( "$HORPOS %g\n" % rec.InitialXOffset )
-        out.write( "$SCALE %g %g\n" %( rec.ScaleOffset, rec.ScaleFactor ) )
-        try: out.write( "$AVERAGES %d\n"%( rec.ActualAverages ) )
-        except: pass
+    for samples in zip( *trace ):
+        file.write( " ".join( map( str, samples ) )+"\n" )
 
-        for samples in zip( *rec ):
-            out.write( " ".join( map( str, samples ) )+"\n" )
-    
-        out.write( "\n" )
+    file.write( "\n" )
 
-    out.flush()
+    file.flush()
 
 
 

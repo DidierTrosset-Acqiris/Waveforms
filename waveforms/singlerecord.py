@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from numpy import int16, int32, float64, array, zeros, resize, fromfunction, sqrt, arctan2
+from numpy import int8, int16, int32, float64, array, zeros, resize, fromfunction, sqrt, arctan2
 from sys import stderr
 
 
@@ -113,7 +113,7 @@ class Record():
      -10179  -5757]
     >>> print( r.FullScale )
     65536
-    >>> print( r.ScaleFactor, r.ScaleOffset )
+    >>> print( r[0].ScaleFactor, r[0].ScaleOffset )
     6.103515625e-05 0.0
     >>> # Check that Record level checkXOffset is used if defined.
     >>> r = Record( checkXOffset=False )
@@ -136,10 +136,11 @@ class Record():
     30 -7e-11 0.0 0.002 6.25e-10
     >>> print( r.FullScale )
     1.0
-    >>> print( r.ScaleFactor, r.ScaleOffset )
+    >>> print( r[0].ScaleFactor, r[0].ScaleOffset )
     1.0 0.0
     """
-    def __init__( self, fetch=None, checkXOffset=True, FullScale=None ):
+    def __init__( self, fetch=None, checkXOffset=True, nbrAdcBits=None, FullScale=None ):
+        self.NbrAdcBits = nbrAdcBits
         self.wfms = []
         self._FullScale = FullScale
         self._checkXOffset = checkXOffset
@@ -191,18 +192,23 @@ class Record():
         return self.wfms[0].XIncrement
 
     @property
-    def ScaleOffset( self ):
-        return self.wfms[0].ScaleOffset
+    def TraceType( self ):
+        return "Digitizer"
 
     @property
-    def ScaleFactor( self ):
-        return self.wfms[0].ScaleFactor
+    def SampleType( self ):
+        if   self.wfms[0].SampleArray.dtype==int32: return "Int32"
+        elif self.wfms[0].SampleArray.dtype==int16: return "Int16"
+        elif self.wfms[0].SampleArray.dtype==int8:  return "Int8"
+        elif self.wfms[0].SampleArray.dtype==float64: return "Real64"
+        else: raise RuntimeError( "ERROR: Unknown sample type "+str( self.wfms[0].SampleArray.dtype )+"." )
 
     @property
     def FullScale( self ):
         if self._FullScale:
             return self._FullScale
         return 2**32 if self.wfms[0].SampleArray.dtype==int32 else 2**16 if self.wfms[0].SampleArray.dtype==int16 else 2**8
+
 
 
 if __name__ == "__main__":

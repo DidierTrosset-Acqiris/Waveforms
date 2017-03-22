@@ -41,7 +41,6 @@ def main():
                 continue
             if riCount>0 and ri>=riStart+riCount:
                 break
-            rec2 = Record()
             for c, wfm in enumerate( rec ):
                 if args.channels and c+1 not in args.channels:
                     continue
@@ -51,17 +50,9 @@ def main():
                     samples = wfm.Samples[siStart:]
                 else:
                     samples = wfm.Samples[siStart:siStart+siCount]
-                rec2.append( (samples,
-                              len( samples ),
-                              0,
-                              wfm.InitialXOffset,
-                              wfm.InitialXTimeSeconds,
-                              wfm.InitialXTimeFraction,
-                              wfm.XIncrement,
-                              wfm.ScaleFactor,
-                              wfm.ScaleOffset) )
+                wfm.Samples = samples
             try:
-                OutputTrace( rec2, out )
+                OutputTrace( rec, out )
             except BrokenPipeError:
                 return
 

@@ -15,6 +15,7 @@ import sys
 import os
 from os.path import expanduser
 import math
+import time
 import select
 import warnings
 
@@ -356,10 +357,7 @@ def CalculateTrace(trace):
         except:
             trace.fittedSine = None
     # Calculate FFT
-    try:
-        trace.nbrFftSamples = CalcBestNbrSamples(trace, trace.fittedSine.all[OMEGA]/2./pi/trace.XIncrement)
-    except:
-        trace.nbrFftSamples = trace.ActualPoints if trace.ActualPoints<32768 else 32768
+    trace.nbrFftSamples = trace.ActualPoints if trace.ActualPoints<65536 else 65536
     CalcFourier(trace, trace.nbrFftSamples)
     # Calculate ratios
     if ShowSignal or ShowSpectrum or ShowFittedSine:
@@ -487,27 +485,27 @@ def ShowImages(trace):
             for ch, wfm in enumerate( trace ):
                 if plotMinSignal:
                     if not lineMinSignals[ch] or len(lineMinSignals[ch].get_xdata()) != len(minSignals[ch]):
-                        minSignals[ch] = trace.waves[ch]
+                        minSignals[ch] = wfm.Samples
                         timeFull = trace.XIncrement * trace.ActualPoints * 1e6
                         time = linspace(0.0, timeFull - (timeFull / trace.ActualPoints), trace.ActualPoints)
                         try: lineMinSignals[ch], = plotMinSignal.plot(time, minSignals[ch], color=_GetColor(ch, light=True))
                         except: pass
                     elif spectrumReset:
-                        minSignals[ch] = trace.waves[ch]
+                        minSignals[ch] = wfm.Samples
                     else:
-                        minSignals[ch] = minimum(trace.waves[ch], minSignals[ch])
+                        minSignals[ch] = minimum(wfm.Samples, minSignals[ch])
                         lineMinSignals[ch].set_ydata(minSignals[ch])
                 if plotMaxSignal:
                     if not lineMaxSignals[ch] or len(lineMaxSignals[ch].get_xdata()) != len(maxSignals[ch]):
-                        maxSignals[ch] = trace.waves[ch]
+                        maxSignals[ch] = wfm.Samples
                         timeFull = trace.XIncrement * trace.ActualPoints * 1e6
                         time = linspace(0.0, timeFull - (timeFull / trace.ActualPoints), trace.ActualPoints)
                         try: lineMaxSignals[ch], = plotMaxSignal.plot(time, maxSignals[ch], color=_GetColor(ch, light=True))
                         except: pass
                     elif spectrumReset:
-                        maxSignals[ch] = trace.waves[ch]
+                        maxSignals[ch] = wfm.Samples
                     else:
-                        maxSignals[ch] = maximum(trace.waves[ch], maxSignals[ch])
+                        maxSignals[ch] = maximum(wfm.Samples, maxSignals[ch])
                         lineMaxSignals[ch].set_ydata(maxSignals[ch])
                 if not linesSignals[ch]:
                     plotSignal.set_title('Signal (us)')
@@ -518,11 +516,15 @@ def ShowImages(trace):
                     time = time + trace.InitialXOffset%trace.XIncrement * 1e6
                     linesSignals[ch], = plotSignal.plot(time, wfm.Samples, color=_GetColor(ch), marker=marker)
                     plotSignal.get_xaxis().axes.set_xlim(0, timeFull - (timeFull / trace.ActualPoints))
-                    yscale = trace.FullScale
-                    if yscale>100: # Big: raw sample value; Small: voltage/phase
-                        ylim = (-yscale/2, yscale/2 - 1)
-                    else:
-                        ylim = (-yscale/2, yscale/2)
+                    try:
+                        yscale = 2**trace.NbrAdcBits * trace.ActualAverages
+                        ylim = ( 0, yscale )
+                    except:
+                        yscale = trace.FullScale
+                        if yscale>100: # Big: raw sample value; Small: voltage/phase
+                            ylim = (-yscale/2, yscale/2 - 1)
+                        else:
+                            ylim = (-yscale/2, yscale/2)
                     plotSignal.get_yaxis().axes.set_ylim(*ylim)
                 else:
                     if trace.InitialXOffset!=0.0:
@@ -547,6 +549,7 @@ def ShowImages(trace):
                 except: pass
                 plotSpectrum.set_title('Spectrum (MHz)')
                 plotSpectrum.set_ylabel('dBFS')
+                plotSpectrum.grid( which='both', linestyle='-' )
                 plotSpectrum.get_xaxis().axes.set_xlim(0, freqHalf)
                 plotSpectrum.get_yaxis().axes.set_ylim(-120, 0)
             else:
@@ -607,10 +610,11 @@ Force = True
 def ReadInput( queue ):
     global ShowAll
     for trace in GetTraceFromSource():
-        if not ShowAll:
+        if not ShowAll and not Pause:
             while not queue.empty():
                 queue.get_nowait()
         queue.put( trace )
+        time.sleep( 1e-3 )
 
 
 def Update():
@@ -623,7 +627,7 @@ def Update():
         return
     Force = False
     if not queue.empty():
-        trace = queue.get_nowait()
+        trace = queue.get()#_nowait()
         CalculateTrace(trace)
         ShowImages(trace)
     if not Pause:
@@ -760,6 +764,8 @@ def main():
 
             plotSpectrum.set_title('Spectrum (MHz)')
             plotSpectrum.set_ylabel('dBFS')
+            plotSpectrum.get_yaxis().axes.set_ylim(-120, 0)
+            plotSpectrum.grid( which='both', linestyle='-' )
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 figSpectrum.tight_layout()
