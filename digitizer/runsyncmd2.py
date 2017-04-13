@@ -228,7 +228,7 @@ def RunSyncAcq():
             else:
                 wfmSize = AgMD2_QueryMinWaveformMemory( Vi, 16, nbrRecords, 0, nbrSamples )
                 Fetchs = [AgMD2_FetchMultiRecordWaveformInt16Py( Vi, Ch, 0, nbrRecords, 0, nbrSamples, wfmSize, nbrRecords ) for Vi, Ch in Channels ]
-                mrec = MultiRecord( Fetchs, checkXOffset=True, nbrAdcBits=16 )
+                mrec = MultiRecord( Fetchs, checkXOffset=not args.no_check_x_offset, nbrAdcBits=16 )
 
             tdcString = ""
             if args.read_tdc:

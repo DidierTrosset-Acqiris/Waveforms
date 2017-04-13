@@ -109,6 +109,10 @@ class _SubWaveform:
         return iter( self.Samples )
 
     @property
+    def FullScale( self ):
+        return FullScale( SampleType( self.mwfm.fetch[0].dtype ) )
+
+    @property
     def Samples( self ):
         first = self.mwfm.FirstValidPoint[self.index]
         actual = self.mwfm.ActualPoints[self.index]
@@ -238,11 +242,11 @@ class MultiRecord():
             if self.checkXOffset:
                 for r in range( mwfm.ActualRecords ):
                     if self.mwfms[0].InitialXOffset[r] != mwfm.InitialXOffset[r]:
-                        raise RuntimeError( "InitialXOffset do not match." )
+                        raise RuntimeError( "InitialXOffset do not match. %g <> %g"%( self.mwfms[0].InitialXOffset[r], mwfm.InitialXOffset[r] ) )
                     if self.mwfms[0].InitialXTimeSeconds[r] != mwfm.InitialXTimeSeconds[r]:
-                        raise RuntimeError( "InitialXTimeSeconds do not match." )
+                        raise RuntimeError( "InitialXTimeSeconds do not match. %g <> %g"%( self.mwfms[0].InitialXTimeSeconds[r], mwfm.InitialXTimeSeconds[r] ) )
                     if self.mwfms[0].InitialXTimeFraction[r] != mwfm.InitialXTimeFraction[r]:
-                        raise RuntimeError( "InitialXTimeFraction do not match." )
+                        raise RuntimeError( "InitialXTimeFraction do not match. %g <> %g"%( self.mwfms[0].InitialXTimeFraction[r], mwfm.InitialXTimeFraction[r] ) )
             if self.mwfms[0].XIncrement != mwfm.XIncrement:
                 raise RuntimeError( "XIncrement do not match." )
         self.mwfms.append( mwfm )
