@@ -101,6 +101,8 @@ setup(
             'RunAgMD2=digitizer.runnermd2:main',
             'PersistViewer=viewer.persist:main',
             'LiveViewer=viewer.live:main',
+            'ReadTrace=waveforms.readtrace:main',
+            'ReadCalWfm=waveforms.readcalwfm:main',
         ],
     },
 )
