@@ -13,9 +13,11 @@ def main():
     parser = ArgumentParser()
     parser.add_argument( "--record-start",  "-rs",  type=int,   default=0   )
     parser.add_argument( "--record-count",  "-rc",  type=int,   default=1000000   )
+    parser.add_argument( "--record-decim",  "-rd",  type=int,   default=1   )
     parser.add_argument( "--sample-start",  "-ss",  type=int,   default=0   )
     parser.add_argument( "--sample-count",  "-sc",  type=int,   default=1000000   )
     parser.add_argument( "--output",        "-o",   type=str )
+    parser.add_argument( "--data-type", "-dt",      type=str,   default="int16", choices=["int8", "int16"] )
     parser.add_argument( "files", nargs='*', type=str )
 
     args = parser.parse_args()
@@ -32,9 +34,12 @@ def main():
 
     riStart = args.record_start
     riCount = args.record_count
+    riDecim = args.record_decim
     siStart = args.sample_start
     siCount = args.sample_count
+    dataType = int8 if args.data_type=="int8" else int16
 
+    recs = []
     for trace in traces:
         ri = -1
         for line in trace:
@@ -53,12 +58,14 @@ def main():
                 except:
                     continue
             try:
-                samples = array( list( map( int, values[siStart:siStart+siCount] ) ), dtype=int16 )
+                samples = array( list( map( int, values[siStart:siStart+siCount] ) ), dtype=dataType )
             except:
                 print( "ERROR on line", ri, line, file=stderr )
                 raise
             ri = ri+1
             if ri<riStart:
+                continue
+            if ( ( ri-riStart )%riDecim )!=0:
                 continue
             if riCount>0 and ri>=riStart+riCount:
                 break
@@ -72,6 +79,17 @@ def main():
                           1e-9, # XIncrement
                           5.0/256.0,  # ScaleFactor
                           0.0 ) )     # ScaleOffset
+            if riCount<0:
+                recs.append( rec )
+                if len( recs )>-riCount:
+                    recs = recs[1:]
+                continue
+            try:
+                OutputTrace( rec, out )
+            except BrokenPipeError:
+                return
+    if riCount<0:
+        for rec in recs:
             try:
                 OutputTrace( rec, out )
             except BrokenPipeError:
