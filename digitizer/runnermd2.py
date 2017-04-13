@@ -140,6 +140,8 @@ def ApplyArgs( vis, args ):
             AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_SAMPLE_CLOCK_SOURCE , AGMD2_VAL_SAMPLE_CLOCK_SOURCE_INTERNAL )   
             if args.clock_ref_external:
                 AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_EXTERNAL )
+            elif args.clock_ref_pxi:
+                AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_PXIE_CLK100 )
             elif args.clock_ref_axie:
                 AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_AXIE_CLK100 )
             else:
@@ -183,6 +185,8 @@ def ApplyArgs( vis, args ):
                 ActiveTrigger = "External%d"%( args.trigger_external ) if args.trigger_external!=4 else "AXIe_SYNC"
             elif args.trigger_internal:
                 ActiveTrigger = "Internal%d"%( args.trigger_internal )
+            elif args.trigger_name:
+                ActiveTrigger = args.trigger_name
             else:
                 ActiveTrigger = "Internal1"
 
@@ -262,8 +266,8 @@ def Acquire( vis, args, queue ):
     global _Continue
     if isinstance( vis, int ):
         vis = [vis]
-    for vi in vis:
-        if args.tsr:
+    if args.tsr:
+        for vi in vis:
             # To find whether the acquisition is already started, try to continue it. In case of error, start it.
             try:
                 #print( "TSR Continue", file=stderr )
@@ -287,12 +291,14 @@ def Acquire( vis, args, queue ):
                     return True
                 #sleep( 0.0001 )
 
-        else:
+    else:
+        for vi in vis:
             AgMD2_InitiateAcquisition( vi )
 
-            while True:
-                # Manages wait/poll
-                if args.poll_timeout:
+        while True:
+            # Manages wait/poll
+            if args.poll_timeout:
+                for vi in vis:
                     acqDone = False
                     fullwait = float( args.poll_timeout )
                     while fullwait>=0 and _Continue and queue.empty() and not acqDone:
@@ -306,18 +312,19 @@ def Acquire( vis, args, queue ):
                     else:
                         AgMD2_Abort( vi )
                         return False
-                else:
-                    try:
+            else:
+                try:
+                    for vi in vis:
                         AgMD2_WaitForAcquisitionComplete( vi, int( args.wait_timeout*1000 )+1 )
-                        return True
-                    except RuntimeError as e:
-                        if args.wait_failure:
-                            raise
-                        else:
-                            print( "WaitForAcquisitionComplete: MAX_TIME_EXCEEDED.", file=stderr )
-                            if not _Continue or not queue.empty():
-                                AgMD2_Abort( vi )
-                                return False
+                    return True
+                except RuntimeError as e:
+                    if args.wait_failure:
+                        raise
+                    else:
+                        print( "WaitForAcquisitionComplete: MAX_TIME_EXCEEDED.", file=stderr )
+                        if not _Continue or not queue.empty():
+                            AgMD2_Abort( vi )
+                            return False
 
 
 
@@ -325,10 +332,11 @@ def FetchChannels( vis, args ):
     global _Continue
     if isinstance( vis, int ):
         vis = [vis]
-    for vi in vis:
         # Manages readout
-        nbrAdcBits = AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_INSTRUMENT_INFO_NBR_ADC_BITS )
-        if args.mode=='DDC':
+    nbrAdcBits = AgMD2_GetAttributeViInt32( vis[0], "", AGMD2_ATTR_INSTRUMENT_INFO_NBR_ADC_BITS )
+
+    if args.mode=='DDC':
+        for vi in vis:
             if args.ddc_decimation_numerator==4:
                 DataWidth = 16
                 Fetch = AgMD2_DDCCoreFetchWaveformInt16Py
@@ -348,7 +356,8 @@ def FetchChannels( vis, args ):
                 _Continue = False
                 break
 
-        elif args.mode=='AVG':
+    elif args.mode=='AVG':
+        for vi in vis:
             if args.read_type == 'real64':
                 DataWidth = 64
                 Fetch = AgMD2_FetchAccumulatedWaveformReal64Py
@@ -372,59 +381,64 @@ def FetchChannels( vis, args ):
                 _Continue = False
                 break
 
-        else:
-            if not args.read_type:
-                args.read_type = 'int8' if nbrAdcBits<=8 else 'int16'
-            if args.records<=1:
-                if args.read_type=='int16':
-                    DataWidth = 16
-                    Fetch = AgMD2_FetchWaveformInt16
-                elif args.read_type=='real64':
-                    DataWidth = 64
-                    Fetch = AgMD2_FetchWaveformReal64
-                else:
-                    DataWidth = 8
-                    Fetch = AgMD2_FetchWaveformInt8
-                nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, 1, 0, args.read_samples )
+    else:
+        if not args.read_type:
+            args.read_type = 'int8' if nbrAdcBits<=8 else 'int16'
+        if args.records<=1:
+            if args.read_type=='int16':
+                DataWidth = 16
+                Fetch = AgMD2_FetchWaveformInt16
+            elif args.read_type=='real64':
+                DataWidth = 64
+                Fetch = AgMD2_FetchWaveformReal64
+            else:
+                DataWidth = 8
+                Fetch = AgMD2_FetchWaveformInt8
+            nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vis[0], DataWidth, 1, 0, args.read_samples )
 
-                try:
-                    rec = Record( nbrAdcBits=nbrAdcBits )
+            rec = Record( checkXOffset=not args.no_check_x_offset, nbrAdcBits=nbrAdcBits )
+            try:
+                for vi in vis:
                     for ch in args.read_channels:
                         rec.append( Fetch( vi, "Channel%d"%( ch ), nbrSamplesToRead ) )
-                except RuntimeError:
-                    AgMD2_SetAttributeViBoolean( vi, "", AGMD2_ATTR_ERROR_ON_OVERRANGE_ENABLED, False )
-                    rec = Record( checkXOffset=not args.no_check_x_offset )
+            except RuntimeError:
+                for vi in vis:
+                    try:
+                        AgMD2_SetAttributeViBoolean( vi, "", AGMD2_ATTR_ERROR_ON_OVERRANGE_ENABLED, False )
+                    except:
+                        continue
+                for vi in vis:
                     for ch in args.read_channels:
                         rec.append( Fetch( vi, "Channel%d"%( ch ), nbrSamplesToRead ) )
+                for vi in vis:
                     AgMD2_SetAttributeViBoolean( vi, "", AGMD2_ATTR_ERROR_ON_OVERRANGE_ENABLED, True )
 
-                try:
-                    OutputTrace( rec, stdout )
-                except BrokenPipeError:
-                    _Continue = False
-                    break
+            try:
+                OutputTrace( rec, stdout )
+            except BrokenPipeError:
+                _Continue = False
 
+        else:
+            if args.read_type=='int16':
+                DataWidth = 16
+                Fetch = AgMD2_FetchMultiRecordWaveformInt16Py
+            elif args.read_type=='real64':
+                DataWidth = 64
+                Fetch = AgMD2_FetchMultiRecordWaveformReal64Py
             else:
-                if args.read_type=='int16':
-                    DataWidth = 16
-                    Fetch = AgMD2_FetchMultiRecordWaveformInt16Py
-                elif args.read_type=='real64':
-                    DataWidth = 64
-                    Fetch = AgMD2_FetchMultiRecordWaveformReal64Py
-                else:
-                    DataWidth = 8
-                    Fetch = AgMD2_FetchMultiRecordWaveformInt8
-                nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, args.read_records, 0, args.read_samples )
+                DataWidth = 8
+                Fetch = AgMD2_FetchMultiRecordWaveformInt8
+            nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, args.read_records, 0, args.read_samples )
 
-                mrec = MultiRecord( checkXOffset=not args.no_check_x_offset, NbrAdcBits=nbrAdcBits ) 
+            mrec = MultiRecord( checkXOffset=not args.no_check_x_offset, NbrAdcBits=nbrAdcBits ) 
+            for vi in vis:
                 for ch in args.read_channels:
                     mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
 
-                try:
-                    OutputTraces( mrec, stdout )
-                except BrokenPipeError:
-                    _Continue = False
-                    break
+            try:
+                OutputTraces( mrec, stdout )
+            except BrokenPipeError:
+                _Continue = False
 
 
 class Runner():

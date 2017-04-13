@@ -35,6 +35,7 @@ class DigitizerParser( ArgumentParser ):
         grps.add_argument( "--clock-ref-internal", "-kri",                         default=False, action='store_true' )
         grps.add_argument( "--clock-ref-external", "-kre",                         default=False, action='store_true' )
         grps.add_argument( "--clock-ref-axie", "-kra",                             default=False, action='store_true' )
+        grps.add_argument( "--clock-ref-pxi", "-krp",                              default=False, action='store_true' )
 
         self.add_argument( "--interleave", "-i",           nargs='*',  type=int )
 
@@ -45,9 +46,10 @@ class DigitizerParser( ArgumentParser ):
         grps = self.add_mutually_exclusive_group()
         grps.add_argument( "--trigger-internal", "-ti",    nargs=None, type=int,   default=1 )
         grps.add_argument( "--trigger-external", "-te",    nargs=None, type=int,   default=None )
+        grps.add_argument( "--trigger-name", "-tn",        nargs=None, type=str )
         self.add_argument( "--trigger-level", "-tl",       nargs=None, type=float, default=None )
         self.add_argument( "--trigger-delay", "-td",       nargs=None, type=float, default=None )
-        self.add_argument( "--trigger-slope", "-ts",                   type=str,   default="p", choices=["positive", "p", "negative", "n"] )
+        self.add_argument( "--trigger-slope", "-ts",                   type=str,   default=None, choices=["positive", "p", "negative", "n"] )
         self.add_argument( "--immediate-trigger", "-it",                           default=False, action='store_true' )
         self.add_argument( "--trigger-output-enabled", "-toe",                     default=False, action='store_true' )
         self.add_argument( "--trigger-output-source", "-tos",          type=str,   default=None )
@@ -102,6 +104,10 @@ def DigitizerArgs( parser=None ):
         args.read_records = args.records
     if not args.read_samples:
         args.read_samples = args.samples
+
+    if args.trigger_name:
+        args.trigger_internal = None
+        args.trigger_external = None
 
     if args.interleave and len( args.interleave )<2:
         parser.error( "argument --interleave/-i: expected at least 2 arguments" )

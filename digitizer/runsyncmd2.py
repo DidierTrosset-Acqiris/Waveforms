@@ -11,15 +11,10 @@
 
 """
 
-from __future__ import print_function
-
 from AgMD2 import *
 from waveforms.trace import OutputTraces
 from waveforms import MultiRecord, DDCMultiRecord
 from digitizer.argparser import DigitizerParser, DigitizerArgs
-#from UtilsAgMD2 import Waveform, Waveforms
-#from ArgParser import DigitizerParser, DigitizerArgs
-#from UtilsCheck import CheckSineContinuity, DiscontinuityException
 import sys
 import os
 from time import sleep
@@ -133,6 +128,8 @@ def RunSyncAcq():
         for Vi in Instrs: AgMD2_SetAttributeViReal64( Vi, "", AGMD2_ATTR_SAMPLE_CLOCK_EXTERNAL_DIVIDER, args.clock_ext_divider )
     elif args.clock_ref_axie:
         for Vi in Instrs: AgMD2_SetAttributeViInt32( Vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_AXIE_CLK100 )
+    elif args.clock_ref_pxi:
+        for Vi in Instrs: AgMD2_SetAttributeViInt32( Vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_PXIE_CLK100 )
     elif args.clock_ref_external:
         for Vi in Instrs: AgMD2_SetAttributeViInt32( Vi, "", AGMD2_ATTR_REFERENCE_OSCILLATOR_SOURCE, AGMD2_VAL_REFERENCE_OSCILLATOR_SOURCE_EXTERNAL )
 
@@ -141,18 +138,30 @@ def RunSyncAcq():
     for Vi in Instrs: AgMD2_SetAttributeViInt64(  Vi, "", AGMD2_ATTR_RECORD_SIZE, RecordSize )
     for Vi in Instrs: AgMD2_SetAttributeViInt64(  Vi, "", AGMD2_ATTR_NUM_RECORDS_TO_ACQUIRE, nbrRecords )
 
+    # Manages trigger
     if args.immediate_trigger:
-        triggerSource = "Immediate"
+        ActiveTrigger = "Immediate"
     else:
-        triggerSource = "External%d"%( args.trigger_external ) if args.trigger_external else "Internal%d"%( args.trigger_internal )
-        triggerLevel = args.trigger_level if args.trigger_level else 0.0
-        for Vi in Instrs: AgMD2_SetAttributeViInt32( Vi, triggerSource, AGMD2_ATTR_TRIGGER_TYPE, AGMD2_VAL_EDGE_TRIGGER )   
-        if triggerSource!="External4":
-            for Vi in Instrs: AgMD2_SetAttributeViReal64( Vi, triggerSource, AGMD2_ATTR_TRIGGER_LEVEL, triggerLevel )   
-    for Vi in Instrs: AgMD2_SetAttributeViString( Vi, "", AGMD2_ATTR_ACTIVE_TRIGGER_SOURCE, triggerSource )
+        if args.trigger_external:
+            ActiveTrigger = "External%d"%( args.trigger_external ) if args.trigger_external!=4 else "AXIe_SYNC"
+        elif args.trigger_internal:
+            ActiveTrigger = "Internal%d"%( args.trigger_internal )
+        elif args.trigger_name:
+            ActiveTrigger = args.trigger_name
+        else:
+            ActiveTrigger = "Internal1"
 
-    triggerDelay = args.trigger_delay if args.trigger_delay else 0.0
-    for Vi in Instrs: AgMD2_SetAttributeViReal64( Vi, "", AGMD2_ATTR_TRIGGER_DELAY, triggerDelay )
+        if args.trigger_level!=None:
+            for Vi in Instrs: AgMD2_SetAttributeViReal64( Vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_LEVEL, args.trigger_level )
+        if args.trigger_delay!=None:
+            for Vi in Instrs: AgMD2_SetAttributeViReal64( Vi, "", AGMD2_ATTR_TRIGGER_DELAY, args.trigger_delay )
+        if args.trigger_slope!=None:
+            if args.trigger_slope in ["negative", "n"]:
+                for Vi in Instrs: AgMD2_SetAttributeViInt32( Vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_SLOPE, AGMD2_VAL_NEGATIVE )
+            else:
+                for Vi in Instrs: AgMD2_SetAttributeViInt32( Vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_SLOPE, AGMD2_VAL_POSITIVE )
+
+    for Vi in Instrs: AgMD2_SetAttributeViString( Vi, "", AGMD2_ATTR_ACTIVE_TRIGGER_SOURCE , ActiveTrigger )
 
     InstrsToRead = list( Instrs )
     ChannelsToRead = ["DDCCore%d"%( ch ) for ch in args.read_channels] if args.mode=="DDC" else ["Channel%d"%( ch ) for ch in args.read_channels]
@@ -219,7 +228,7 @@ def RunSyncAcq():
             else:
                 wfmSize = AgMD2_QueryMinWaveformMemory( Vi, 16, nbrRecords, 0, nbrSamples )
                 Fetchs = [AgMD2_FetchMultiRecordWaveformInt16Py( Vi, Ch, 0, nbrRecords, 0, nbrSamples, wfmSize, nbrRecords ) for Vi, Ch in Channels ]
-                mrec = MultiRecord( Fetchs )
+                mrec = MultiRecord( Fetchs, checkXOffset=True, nbrAdcBits=16 )
 
             tdcString = ""
             if args.read_tdc:
