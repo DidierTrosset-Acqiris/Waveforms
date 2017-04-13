@@ -7,7 +7,7 @@ except:
 
 from subprocess import *
 
-from waveforms.trace import ReadTrace
+from waveforms.trace import ReadTrace, FullScale
 from threading import Thread
 from queue import Queue
 import socket
@@ -341,6 +341,8 @@ def GetTraceFromSource():
     if input:
         for rec in ReadTrace( input ):
             rec.filename = filename
+            if not hasattr(rec, 'FullScale'):
+                rec.FullScale = FullScale( rec.SampleType );
             yield rec
 #        if not TcpPort or TcpHost: # We are not listening
 #            Pause = True
@@ -696,10 +698,14 @@ def main():
     global tkMain, tkHeader, tkSignal, figSignal, plotSignal, linesSignals, plotMinSignal, lineMinSignals, minSignals, plotMaxSignal, lineMaxSignals, maxSignals, tkSpectrum, plotSpectrum, lineSpectrum, plotMaxSpectrum, lineMaxSpectrum, specMax, tkFitted
 
     tk = Tk()
-    with open( expanduser( "~/.viewer_live.cfg" ), "rt" ) as f:
-        line = f.readline()
-        geometry = re.match( r"geometry\s*=\s*(\S*)\s*", line ).group(1)
-        tk.geometry( geometry )
+    try:
+        with open( expanduser( "~/.viewer_live.cfg" ), "rt" ) as f:
+            line = f.readline()
+            geometry = re.match( r"geometry\s*=\s*(\S*)\s*", line ).group(1)
+            tk.geometry( geometry )
+    except FileNotFoundError:
+        pass
+
 
     tkMain = Frame(tk, name="main")
     tkMain.pack(fill=BOTH, expand=1)
