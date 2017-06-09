@@ -4,7 +4,7 @@ from sys import stdin, stdout
 from waveforms.trace import ReadTrace
 from numpy import ones, float32
 from matplotlib import pyplot
-from math import pi
+from math import fmod
 from argparse import ArgumentParser
 
 # Takes as input a .trc file, and output a .skew file.
@@ -17,6 +17,7 @@ def main():
     parser.add_argument( "--scale",   "-s",  type=int,   default=65536 )
     parser.add_argument( "--length",  "-l",  type=float, default=1e-9  )
     parser.add_argument( "--offset",  "-o",  type=float, default=0.0   )
+    parser.add_argument( "--zero-delay", "-zd", action='store_true' )
     parser.add_argument( "files", nargs='*', type=str )
 
     args = parser.parse_args()
@@ -43,18 +44,22 @@ def main():
     else:
         traces = [open( name, 'rt' ) for name in args.files]
 
+    c0 = 0
     for trace in traces:
         for record in ReadTrace( trace ):
+            InitialXOffset = fmod( record.InitialXOffset, record.XIncrement ) if args.zero_delay else record.InitialXOffset
+            cr0 = len(record)
             for c, waveform in r_enumerate( record ):
                 for i in range( len(waveform) ):
-                    time = record.InitialXOffset+i*record.XIncrement
+                    time = InitialXOffset+i*record.XIncrement
                     sample = waveform[i]
                     x = int( ( -offset+time )/length*width )
                     y = height//2-int( sample/scale*height )
                     if x>width:
                         break
                     if 0<=x<width and 0<=y<height:
-                        bmp[y, x] = CC[c]
+                        bmp[y, x] = CC[c+c0]
+        c0 = c0+cr0
 
     pyplot.xlabel( "Time (ns)" )
     pyplot.xticks( [0, width-1], ["%g"%(offset*1e9), "%g"%(( offset+length )*1e9)] )

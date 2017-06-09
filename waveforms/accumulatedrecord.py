@@ -173,7 +173,7 @@ class _AccSubRecord:
 
     @property
     def FullScale( self ):
-        try: nbrAdcBits = self.mrec.NbrAdcBits+2
+        try: nbrAdcBits = self.mrec.NbrAdcBits+1 if self.mrec.NbrAdcBits==12 else self.mrec.NbrAdcBits
         except: nbrAdcBits = 8
         return 2**nbrAdcBits * self.ActualAverages if self.mrec.mwfms[0].SampleArray.dtype==int32 else 1
 
@@ -282,7 +282,7 @@ class AccMultiRecord():
 
 
 
-def ReadAccRecords( f ):
+def _test_ReadAccRecords( f ):
     """ Read AccRecord objects from a file
     
     >>> from io import StringIO

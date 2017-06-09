@@ -351,7 +351,7 @@ def GetTraceFromSource():
 
 
 def CalculateTrace(trace):
-    global ShowSpectrum, ShowFittedSine
+    global ShowSignal, ShowRatios, ShowSpectrum, ShowFittedSine
     # Calculate sine fit
     if USE_SCIPY:
         try:
@@ -362,14 +362,12 @@ def CalculateTrace(trace):
     trace.nbrFftSamples = trace.ActualPoints if trace.ActualPoints<65536 else 65536
     CalcFourier(trace, trace.nbrFftSamples)
     # Calculate ratios
-    if ShowSignal or ShowSpectrum or ShowFittedSine:
-        try:
-            trace.ratios = CalcRatios(trace, 1)
-        except:
-            trace.ratios = None
-    else:
-        trace.ratios = None
+    trace.ratios = None
+    if ShowRatios:
+        try: trace.ratios = CalcRatios(trace, 1)
+        except: pass
     return trace
+
 
 def tkUpdateLabel(label, txt):
     label.configure(text = txt)
@@ -616,7 +614,7 @@ def ReadInput( queue ):
             while not queue.empty():
                 queue.get_nowait()
         queue.put( trace )
-        time.sleep( 1e-3 )
+        #time.sleep( 1e-3 )
 
 
 def Update():
@@ -659,7 +657,7 @@ def RunNext():
 
 
 def main():
-    global ShowSignal, ShowSpectrum, ShowFittedSine, ShowAll
+    global ShowRatios, ShowSignal, ShowSpectrum, ShowFittedSine, ShowAll
     global Pause, RunCommand, InputFile, TcpPort, TcpBind, TcpHost
     global queue
 
@@ -667,6 +665,7 @@ def main():
     parser = ArgumentParser( "Live Viewer" )
     parser.add_argument( "--signal", action='store_true', default=None )
     parser.add_argument( "--spectrum", action='store_true' )
+    parser.add_argument( "--ratios", action='store_true' )
     parser.add_argument( "--fitted-sine", action='store_true' )
     parser.add_argument( "--size", type=str, default="640x320" )
     parser.add_argument( "--pause", action='store_true', default=False )
@@ -690,6 +689,7 @@ def main():
     TcpHost = args.tcp
     TcpBind = args.bind if args.bind else ""
     TcpPort = args.listen
+    ShowRatios = args.ratios
     ShowSignal = args.signal if args.spectrum else True
     ShowSpectrum = args.spectrum
     ShowFittedSine = args.fitted_sine

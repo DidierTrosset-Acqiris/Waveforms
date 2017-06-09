@@ -181,12 +181,12 @@ def ApplyArgs( vis, args ):
         if args.immediate_trigger:
             ActiveTrigger = "Immediate"
         else:
-            if args.trigger_external:
+            if args.trigger_name:
+                ActiveTrigger = args.trigger_name
+            elif args.trigger_external:
                 ActiveTrigger = "External%d"%( args.trigger_external ) if args.trigger_external!=4 else "AXIe_SYNC"
             elif args.trigger_internal:
                 ActiveTrigger = "Internal%d"%( args.trigger_internal )
-            elif args.trigger_name:
-                ActiveTrigger = args.trigger_name
             else:
                 ActiveTrigger = "Internal1"
 
@@ -252,7 +252,7 @@ def Calibrate( vis, args, loop ):
         if not calibrate:
             continue
 
-        print( "==> Calibration required.", file=stderr )
+        #print( "==> Calibration required.", file=stderr )
         if args.calibration_signal:
             AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "" )
 
@@ -366,7 +366,7 @@ def FetchChannels( vis, args ):
                 Fetch = AgMD2_FetchAccumulatedWaveformInt32Py
             nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, 1, 0, args.read_samples )
 
-            mrec = AccMultiRecord( checkXOffset=not args.no_check_x_offset, nbrAdcBits=nbrAdcBits+1 )
+            mrec = AccMultiRecord( checkXOffset=not args.no_check_x_offset, nbrAdcBits=nbrAdcBits )
             for ch in args.read_channels:
                 #mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
                 fetch = Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records )
@@ -428,9 +428,9 @@ def FetchChannels( vis, args ):
             else:
                 DataWidth = 8
                 Fetch = AgMD2_FetchMultiRecordWaveformInt8
-            nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, args.read_records, 0, args.read_samples )
+            nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vis[0], DataWidth, args.read_records, 0, args.read_samples )
 
-            mrec = MultiRecord( checkXOffset=not args.no_check_x_offset, NbrAdcBits=nbrAdcBits ) 
+            mrec = MultiRecord( checkXOffset=not args.no_check_x_offset, nbrAdcBits=nbrAdcBits ) 
             for vi in vis:
                 for ch in args.read_channels:
                     mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )

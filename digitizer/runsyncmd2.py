@@ -109,6 +109,11 @@ def RunSyncAcq():
     Serials = [AgMD2_GetAttributeViString( Vi, "", AGMD2_ATTR_INSTRUMENT_INFO_SERIAL_NUMBER_STRING, 32 ) for Vi in Instrs]
     Handles = [AgMD2_GetAttributeViInt32( Vi, "", AGMD2_ATTR_MODULE_SYNCHRONIZATION_HANDLE ) for Vi in Instrs]
 
+    # Manages conbination
+    if args.interleave:
+        ch, sub = args.interleave[:2]
+        for Vi in Instrs: AgMD2_SetAttributeViString( Vi, "Channel%d"%( ch ), AGMD2_ATTR_TIME_INTERLEAVED_CHANNEL_LIST, "Channel%d"%( sub ) )
+
     if args.mode=='DDC':
         ddcSampFreq = args.sampling_frequency/args.ddc_decimation_numerator
         nbrCores = AgMD2_GetAttributeViInt32( Instrs[0], "", AGMD2_ATTR_DDCCORE_COUNT )
@@ -163,6 +168,15 @@ def RunSyncAcq():
 
     for Vi in Instrs: AgMD2_SetAttributeViString( Vi, "", AGMD2_ATTR_ACTIVE_TRIGGER_SOURCE , ActiveTrigger )
 
+    #for Vi in Instrs: AgMD2_SetAttributeViBoolean( Vi, "Channel6", AGMD2_ATTR_CHANNEL_ENABLED, False )
+
+    # Manages channels
+    for Vi in Instrs:
+        for ch in range( 1, 9 ):#args.read_channels:
+            channel = "Channel%d"%( ch )
+            if args.vertical_range:  AgMD2_SetAttributeViReal64( Vi, channel, AGMD2_ATTR_VERTICAL_RANGE,  args.vertical_range )
+            if args.vertical_offset: AgMD2_SetAttributeViReal64( Vi, channel, AGMD2_ATTR_VERTICAL_OFFSET, args.vertical_offset )
+
     InstrsToRead = list( Instrs )
     ChannelsToRead = ["DDCCore%d"%( ch ) for ch in args.read_channels] if args.mode=="DDC" else ["Channel%d"%( ch ) for ch in args.read_channels]
 
@@ -195,8 +209,21 @@ def RunSyncAcq():
                 sleep( delay )
 
 
-        if sync==0 or args.calibrate_period and sync%args.calibrate_period==0:
-            for Vi in Instrs: AgMD2_SelfCalibrate( Vi )
+        for Vi in Instrs:
+            AgMD2_InitiateAcquisition( Vi )
+        if sendAXIeTriggers:
+            SendAXIeTriggers( Instrs[0], nbrRecords )
+        for Vi in Instrs:
+            AgMD2_WaitForAcquisitionComplete( Vi, 20 )
+
+        for Vi in Instrs: AgMD2_SelfCalibrate( Vi )
+
+        for Vi in Instrs:
+            AgMD2_InitiateAcquisition( Vi )
+        if sendAXIeTriggers:
+            SendAXIeTriggers( Instrs[0], nbrRecords )
+        for Vi in Instrs:
+            AgMD2_WaitForAcquisitionComplete( Vi, 20 )
 
         if len( Instrs )>1:
             AgMD2_ModuleSynchronizationConfigureSlaves( Instrs[0], Handles[1:] )
