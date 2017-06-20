@@ -485,15 +485,42 @@ def _test_OutputTrace( records, file ):
     <BLANKLINE>
     <BLANKLINE>
     >>> o.close()
+    >>> o = StringIO()
+    >>> OutputTrace( r, file=o, Model="U5303A", NbrSamples=8 )
+    >>> print( o.getvalue() )
+    $TraceType Digitizer
+    $SampleType Int16
+    $FullScale 65536
+    $ActualChannels 2
+    $Model U5303A
+    $XIncrement 6.25e-10
+    $InitialXOffset -7e-11
+    $InitialXTimeSeconds 0.0
+    $InitialXTimeFraction 0.002
+    $$ScaleFactor 0 6.103515625e-05
+    $$ScaleOffset 0 0.0
+    $$ScaleFactor 1 3.0517578125e-05
+    $$ScaleOffset 1 0.0
+    -2243 8093
+    3171 11667
+    8093 13533
+    11667 13203
+    13533 10973
+    13203 6947
+    10973 1869
+    6947 -3485
+    <BLANKLINE>
+    <BLANKLINE>
+    >>> o.close()
     """
 
 
-def OutputTraces( traces, file, Model=None ):
+def OutputTraces( traces, file, Model=None, NbrSamples=None ):
     for trace in traces:
-        OutputTrace( trace, file=file, Model=Model )
+        OutputTrace( trace, file=file, Model=Model, NbrSamples=NbrSamples )
 
 
-def OutputTrace( trace, file, Model=None ):
+def OutputTrace( trace, file, Model=None, NbrSamples=None ):
     """ Write the given Trace to the given file object.
     """
     sampleType = getattr( trace, 'SampleType', SampleType( trace[0].Samples.dtype ) )
@@ -513,7 +540,9 @@ def OutputTrace( trace, file, Model=None ):
     try: print( "$ActualAverages", trace.ActualAverages, file=file )
     except: pass
 
-    for samples in zip( *trace ):
+    for index, samples in enumerate( zip( *trace ) ):
+        if NbrSamples and index>=NbrSamples:
+            break
         file.write( " ".join( map( str, samples ) )+"\n" )
 
     file.write( "\n" )
