@@ -22,10 +22,14 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--averages", "-a",                         type=int,   default=1 )
         self.add_argument( "--mode", "-m",                             type=str,   default='DGT', choices=['DGT', 'DDC', 'AVG'] )
 
+        self.add_argument( "--streaming-continuous", "-csr",                       default=False, action='store_true' )
+        self.add_argument( "--streaming-triggered", "-cst",                        default=False, action='store_true' )
+
         self.add_argument( "--no-calibrate", "-nc",                                default=False, action='store_true' )
         self.add_argument( "--calibrate-fast", "-cf",                              default=False, action='store_true' )
         self.add_argument( "--calibrate-channel", "-cc",   nargs='?',  type=int,   default=0 )
         self.add_argument( "--calibrate-period", "-cp",    nargs=None, type=int )
+        self.add_argument( "--cal-offset-target", "-cot",              type=float )
 
         grps = self.add_mutually_exclusive_group()
         grps.add_argument( "--clock-internal", "-ki",                              default=False, action='store_true' )
@@ -64,6 +68,10 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--read-samples", "-rs",        nargs=None, type=int,   default=None )
         self.add_argument( "--read-type", "-rt",           nargs=None, type=str,   default=None, choices=['int8', 'int16', 'int32', 'real64'] )
         self.add_argument( "--read-channels", "-rc",       nargs='*',  type=int,   default=[1] )
+
+        self.add_argument( "--output-1st-record", "-o1r",  nargs=None, type=int,   default=None )
+        self.add_argument( "--output-records", "-or",      nargs=None, type=int,   default=None )
+        self.add_argument( "--output-samples", "-os",      nargs=None, type=int,   default=None )
 
         self.add_argument( "--vertical-range", "-vr",                  type=float, default=None )
         self.add_argument( "--vertical-offset", "-vo",                 type=float, default=None )

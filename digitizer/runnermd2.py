@@ -131,6 +131,8 @@ def ApplyArgs( vis, args ):
     if isinstance( vis, int ):
         vis = [vis]
     for vi in vis:
+        if AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_IS_IDLE ) != AGMD2_VAL_ACQUISITION_STATUS_RESULT_TRUE:
+            AgMD2_Abort( vi )
         # Manages the clocking scheme
         if args.clock_external:
             AgMD2_UpdateAttributeViInt32(  vi, "", AGMD2_ATTR_SAMPLE_CLOCK_SOURCE , AGMD2_VAL_SAMPLE_CLOCK_SOURCE_EXTERNAL )   
@@ -168,6 +170,15 @@ def ApplyArgs( vis, args ):
             ch, sub = args.interleave[:2]
             AgMD2_UpdateAttributeViString( vi, "Channel%d"%( ch ), AGMD2_ATTR_TIME_INTERLEAVED_CHANNEL_LIST, "Channel%d"%( sub ) )
 
+        # Manages TSR
+        if args.tsr:
+            AgMD2_UpdateAttributeViBoolean( vi, "", AGMD2_ATTR_TSR_ENABLED, VI_TRUE if args.tsr else VI_FALSE )
+
+        # Manages streaming
+        if args.streaming_continuous or args.streaming_triggered:
+            streamingMode = AGMD2_VAL_STREAMING_MODE_CONTINUOUS if args.streaming_continuous else AGMD2_VAL_STREAMING_MODE_TRIGGERED
+            AgMD2_UpdateAttributeViInt32( vi, "", AGMD2_ATTR_STREAMING_MODE, streamingMode )
+
         # Manages sample rate: set to the max, and then adjust if required
         #try: AgMD2_UpdateAttributeViReal64(  vi, "", AGMD2_ATTR_SAMPLE_RATE, 1e10 )
         #except: pass
@@ -194,7 +205,7 @@ def ApplyArgs( vis, args ):
                 AgMD2_UpdateAttributeViReal64( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_LEVEL, args.trigger_level )
             if args.trigger_delay!=None:
                 AgMD2_UpdateAttributeViReal64( vi, "", AGMD2_ATTR_TRIGGER_DELAY, args.trigger_delay )
-                stderr.write( "==>td:%g\n"%AgMD2_GetAttributeViReal64( vi, "", AGMD2_ATTR_TRIGGER_DELAY ) )
+                #stderr.write( "==>td:%g\n"%AgMD2_GetAttributeViReal64( vi, "", AGMD2_ATTR_TRIGGER_DELAY ) )
             if args.trigger_slope!=None:
                 if args.trigger_slope in ["negative", "n"]:
                     AgMD2_UpdateAttributeViInt32( vi, ActiveTrigger, AGMD2_ATTR_TRIGGER_SLOPE, AGMD2_VAL_NEGATIVE )
@@ -221,10 +232,6 @@ def ApplyArgs( vis, args ):
         if args.calibration_signal:
             AgMD2_UpdateAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "Signal"+args.calibration_signal )
 
-        # Manages TSR
-        if args.tsr:
-            AgMD2_UpdateAttributeViBoolean( vi, "", AGMD2_ATTR_TSR_ENABLED, VI_TRUE if args.tsr else VI_FALSE )
-
         # Manages ControlIO
         if args.control_io1:
             AgMD2_UpdateAttributeViString( vi, "ControlIO1", AGMD2_ATTR_CONTROL_IO_SIGNAL, args.control_io1 )
@@ -234,6 +241,13 @@ def ApplyArgs( vis, args ):
 #        from random import randint
 #        for ch in [1, 2, 3, 4, 5, 6, 24, 25, 26, 27, 31, 32]:#+[randint(1, 32) for a in range(12)]:
 #            AgMD2_SetAttributeViBoolean( vi, "Channel%d"%ch, AGMD2_ATTR_CHANNEL_ENABLED, False )
+
+        # Manages the calibration offset target
+        if args.cal_offset_target:
+            AgMD2_UpdateAttributeViBoolean( vi, "", AGMD2_ATTR_CALIBRATION_TARGET_VOLTAGE_ENABLED, True )
+            for ch in args.read_channels:
+                channel = "Channel%d"%( ch )
+                AgMD2_UpdateAttributeViReal64( vi, channel, AGMD2_ATTR_CHANNEL_CALIBRATION_TARGET_VOLTAGE,  args.cal_offset_target )
 
         AgMD2_ApplySetup( vi )
         print( "Firmware:", AgMD2_GetAttributeViString( vi, "", AGMD2_ATTR_INSTRUMENT_FIRMWARE_REVISION, 256 ), file=stderr )
@@ -262,7 +276,7 @@ def Calibrate( vis, args, loop ):
             AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "Signal"+args.calibration_signal )
 
 
-def Acquire( vis, args, queue ):
+def Acquire( vis, args, queue, loop ):
     global _Continue
     if isinstance( vis, int ):
         vis = [vis]
@@ -274,22 +288,33 @@ def Acquire( vis, args, queue ):
                 AgMD2_TSRContinue( vi )
                 overflow = AgMD2_GetAttributeViBoolean( vi, "", AGMD2_ATTR_TSR_MEMORY_OVERFLOW_OCCURRED )
                 if overflow:
+                    print( "ERROR: TSR MEMORY OVERFLOW", file=stderr )
                     _Continue = False
                     AgMD2_Abort( vi )
-                    print( "ERROR: TSR MEMORY OVERFLOW", file=stderr )
-                    return False
+                    #return False
             except:
                 #print( "\nPress ENTER", file=stderr )
                 #stdin.readline()
                 #print( "Initiate Acquistion", file=stderr )
                 AgMD2_InitiateAcquisition( vi )
 
-            while _Continue:
+            polls = 0
+            #while _Continue:
+            for a in range(10000):
                 complete = AgMD2_GetAttributeViBoolean( vi, "", AGMD2_ATTR_TSR_IS_ACQUISITION_COMPLETE )
                 #print( "GetAttribute TSR_IS_ACQUISITION_COMPLETE :", complete, file=stderr )
+                if a==9999 or complete:
+                    print( "GetAttribute TSR_IS_ACQUISITION_COMPLETE", polls, " :", "0 -> ", complete, file=stderr )
                 if complete:
                     return True
-                #sleep( 0.0001 )
+                polls = polls + 1
+                sleep( 0.0001 )
+
+    elif args.streaming_continuous or args.streaming_triggered:
+        for vi in vis:
+            if AgMD2_GetAttributeViInt32( vi, "", AGMD2_ATTR_IS_IDLE ) == AGMD2_VAL_ACQUISITION_STATUS_RESULT_TRUE:
+                AgMD2_InitiateAcquisition( vi )
+        return True
 
     else:
         for vi in vis:
@@ -335,6 +360,27 @@ def FetchChannels( vis, args ):
         # Manages readout
     nbrAdcBits = AgMD2_GetAttributeViInt32( vis[0], "", AGMD2_ATTR_INSTRUMENT_INFO_NBR_ADC_BITS )
 
+    if args.streaming_continuous or args.streaming_triggered:
+        sleep( 0.01 )
+        for vi in vis:
+            tsCount = 32*1024
+            fetch = AgMD2_StreamFetchDataInt32( vi, "StreamTriggers", tsCount, tsCount )
+            if fetch[3] == tsCount:
+                print( "Fetch: ", fetch[1], fetch[2], fetch[3], fetch[4], file=stderr )
+                with open( "ts.txt", "at" ) as f:
+                  for ts in fetch[0][fetch[4]:fetch[4]+fetch[3]].view( 'uint64' ):
+                      print( ts//256, file=f )
+            else:
+                print( "Available: ", fetch[1], fetch[2], fetch[3], fetch[4], file=stderr )
+            chCount = 8*1024*1024
+            fetchCh1 = AgMD2_StreamFetchDataInt32( vi, "StreamCh1", chCount, chCount )
+            if fetchCh1[3] == chCount:
+                print( "FetchCh1: ", fetchCh1[1], fetchCh1[2], fetchCh1[3], fetchCh1[4], file=stderr )
+            fetchCh2 = AgMD2_StreamFetchDataInt32( vi, "StreamCh2", chCount, chCount )
+            if fetchCh2[3] == chCount:
+                print( "FetchCh2: ", fetchCh2[1], fetchCh2[2], fetchCh2[3], fetchCh2[4], file=stderr )
+        return
+    
     if args.mode=='DDC':
         for vi in vis:
             if args.ddc_decimation_numerator==4:
@@ -364,17 +410,20 @@ def FetchChannels( vis, args ):
             else:
                 DataWidth = 32
                 Fetch = AgMD2_FetchAccumulatedWaveformInt32Py
-            nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, 1, 0, args.read_samples )
+            nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vi, DataWidth, args.read_records, 0, args.read_samples )
 
             mrec = AccMultiRecord( checkXOffset=not args.no_check_x_offset, nbrAdcBits=nbrAdcBits )
+            #print( "Fetch", file=stderr )
             for ch in args.read_channels:
                 #mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
                 fetch = Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records )
-                fetch[1] = args.averages
+                #fetch[1] = args.averages
                 mrec.append( fetch )
 
             try:
-                OutputTraces( mrec, stdout )
+                OutputTraces( mrec, stdout, FirstRecord=args.output_1st_record, NbrRecords=args.output_records, NbrSamples=args.output_samples )
+                stdout.write( "\n" )
+                stdout.flush()
                 #print( "$InitialXTimeSeconds", fetch[6][0], file=stdout )
                 #print( "$InitialXTimeFraction", fetch[7][0], file=stdout )
             except BrokenPipeError:
@@ -500,7 +549,7 @@ def Run( args, queue ):
             
         Calibrate( vis, args, loop )
 
-        if Acquire( vis, args, queue ):
+        if Acquire( vis, args, queue, loop ):
             FetchChannels( vis, args )
 
         # Manages looping
