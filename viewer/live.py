@@ -353,7 +353,7 @@ def GetTraceFromSource():
 def CalculateTrace(trace):
     global ShowSignal, ShowRatios, ShowSpectrum, ShowFittedSine
     # Calculate sine fit
-    if USE_SCIPY:
+    if USE_SCIPY and ShowFittedSine:
         try:
             trace.fittedSine = CalcFittedSine(trace)
         except:

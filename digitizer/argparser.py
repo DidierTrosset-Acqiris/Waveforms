@@ -59,6 +59,13 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--trigger-output-source", "-tos",          type=str,   default=None )
         self.add_argument( "--trigger-output-offset", "-too", nargs=None, type=float, default=None )
 
+        self.add_argument( "--self-trigger-square-wave", "-stsw",                  default=False, action='store_true' )
+        self.add_argument( "--self-trigger-wave-frequency", "-stwf",   nargs=None, type=float, default=1e3 )
+        self.add_argument( "--self-trigger-wave-duty-cycle", "-stwdc", nargs=None, type=float, default=0.1 )
+
+        self.add_argument( "--self-trigger-armed-pulse", "-stap",                  default=False, action='store_true' )
+        self.add_argument( "--self-trigger-pulse-duration", "-stpd",   nargs=None, type=float, default=None )
+
         grps = self.add_mutually_exclusive_group()
         grps.add_argument( "--wait-timeout", "-wt",        nargs='?',  type=float, default=1.0 )
         grps.add_argument( "--poll-timeout", "-pt",        nargs=None, type=float, default=None )
@@ -82,6 +89,7 @@ class DigitizerParser( ArgumentParser ):
 
         self.add_argument( "--control-io1", "-io1",                    type=str,   default=None )
         self.add_argument( "--control-io2", "-io2",                    type=str,   default=None )
+        self.add_argument( "--control-io3", "-io3",                    type=str,   default=None )
 
         self.add_argument( "--ddc-decimation-numerator", "-ddn",       type=int )
         self.add_argument( "--ddc-decimation-denominator", "-ddd",     type=int )

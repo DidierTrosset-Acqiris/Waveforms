@@ -515,35 +515,63 @@ def _test_OutputTrace( records, file ):
     """
 
 
-def OutputTraces( traces, file, Model=None, NbrSamples=None ):
-    for trace in traces:
+def OutputTraces( traces, file, Model=None, FirstRecord=None, NbrRecords=None, NbrSamples=None ):
+    LastRecord = FirstRecord+NbrRecords if FirstRecord and NbrRecords else NbrRecords if NbrRecords else None
+    for index, trace in enumerate( traces ):
+        if FirstRecord and index<FirstRecord:
+            continue
+        if LastRecord and index>=LastRecord:
+            break
         OutputTrace( trace, file=file, Model=Model, NbrSamples=NbrSamples )
 
 
 def OutputTrace( trace, file, Model=None, NbrSamples=None ):
     """ Write the given Trace to the given file object.
     """
-    sampleType = getattr( trace, 'SampleType', SampleType( trace[0].Samples.dtype ) )
-    print( "$TraceType", trace.TraceType, file=file )
-    print( "$SampleType", sampleType, file=file )
-    if hasattr( trace, 'NbrAdcBits' ) and trace.NbrAdcBits: print( "$NbrAdcBits", trace.NbrAdcBits, file=file )
-    if hasattr( trace, 'FullScale' ) and trace.FullScale: print( "$FullScale", trace.FullScale, file=file )
-    print( "$ActualChannels", len( trace ), file=file )
-    if Model: print( "$Model", Model, file=file )
-    print( "$XIncrement", trace.XIncrement, file=file )
-    print( "$InitialXOffset", trace.InitialXOffset, file=file )
-    print( "$InitialXTimeSeconds", trace.InitialXTimeSeconds, file=file )
-    print( "$InitialXTimeFraction", trace.InitialXTimeFraction, file=file )
-    for index, wave in enumerate( trace ):
-        print( "$$ScaleFactor", index, wave.ScaleFactor, file=file )
-        print( "$$ScaleOffset", index, wave.ScaleOffset, file=file )
-    try: print( "$ActualAverages", trace.ActualAverages, file=file )
-    except: pass
+    try:
+        sampleType = getattr( trace, 'SampleType', SampleType( trace[0].Samples.dtype ) )
+        print( "$TraceType", trace.TraceType, file=file )
+        print( "$SampleType", sampleType, file=file )
+        if hasattr( trace, 'NbrAdcBits' ) and trace.NbrAdcBits: print( "$NbrAdcBits", trace.NbrAdcBits, file=file )
+        if hasattr( trace, 'FullScale' ) and trace.FullScale: print( "$FullScale", trace.FullScale, file=file )
+        if Model: print( "$Model", Model, file=file )
+        print( "$XIncrement", trace.XIncrement, file=file )
+        print( "$InitialXOffset", trace.InitialXOffset, file=file )
+        print( "$InitialXTimeSeconds", format( trace.InitialXTimeSeconds, '.1f' ) if isinstance( trace.InitialXTimeSeconds, float ) else trace.InitialXTimeSeconds, file=file )
+        print( "$InitialXTimeFraction", format( trace.InitialXTimeFraction, '.8f' ) if isinstance( trace.InitialXTimeFraction, float ) else trace.InitialXTimeFraction, file=file )
 
-    for index, samples in enumerate( zip( *trace ) ):
-        if NbrSamples and index>=NbrSamples:
-            break
-        file.write( " ".join( map( str, samples ) )+"\n" )
+        nbrChannels = len( trace )
+        print( "$ActualChannels", len( trace ), file=file );
+        for index, wave in enumerate( trace ):
+            print( "$$ScaleFactor", index, wave.ScaleFactor, file=file )
+            print( "$$ScaleOffset", index, wave.ScaleOffset, file=file )
+        try: print( "$ActualAverages", trace.ActualAverages, file=file )
+        except: pass
+        for index, samples in enumerate( zip( *trace ) ):
+            if NbrSamples and index>=NbrSamples:
+                break
+            file.write( " ".join( map( str, samples ) )+"\n" )
+    except TypeError:
+        sampleType = getattr( trace, 'SampleType', SampleType( trace.Samples.dtype ) )
+        print( "$TraceType", trace.TraceType, file=file )
+        print( "$SampleType", sampleType, file=file )
+        if hasattr( trace, 'NbrAdcBits' ) and trace.NbrAdcBits: print( "$NbrAdcBits", trace.NbrAdcBits, file=file )
+        if hasattr( trace, 'FullScale' ) and trace.FullScale: print( "$FullScale", trace.FullScale, file=file )
+        if Model: print( "$Model", Model, file=file )
+        print( "$XIncrement", trace.XIncrement, file=file )
+        print( "$InitialXOffset", trace.InitialXOffset, file=file )
+        print( "$InitialXTimeSeconds", format( trace.InitialXTimeSeconds, '.1f' ) if isinstance( trace.InitialXTimeSeconds, float ) else trace.InitialXTimeSeconds, file=file )
+        print( "$InitialXTimeFraction", format( trace.InitialXTimeFraction, '.8f' ) if isinstance( trace.InitialXTimeFraction, float ) else trace.InitialXTimeFraction, file=file )
+
+        print( "$ActualChannels", 1, file=file );
+        print( "$$ScaleFactor", 0, trace.ScaleFactor, file=file )
+        print( "$$ScaleOffset", 0, trace.ScaleOffset, file=file )
+        try: print( "$ActualAverages", trace.ActualAverages, file=file )
+        except: pass
+        for index, sample in enumerate( trace.Samples ):
+            if NbrSamples and index>=NbrSamples:
+                break
+            file.write( str( sample )+"\n" )
 
     file.write( "\n" )
 

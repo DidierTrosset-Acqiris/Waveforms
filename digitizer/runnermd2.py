@@ -237,6 +237,25 @@ def ApplyArgs( vis, args ):
             AgMD2_UpdateAttributeViString( vi, "ControlIO1", AGMD2_ATTR_CONTROL_IO_SIGNAL, args.control_io1 )
         if args.control_io2:
             AgMD2_UpdateAttributeViString( vi, "ControlIO2", AGMD2_ATTR_CONTROL_IO_SIGNAL, args.control_io2 )
+        if args.control_io3:
+            AgMD2_UpdateAttributeViString( vi, "ControlIO3", AGMD2_ATTR_CONTROL_IO_SIGNAL, args.control_io3 )
+
+        # Manages SelfTrigger
+        if args.self_trigger_square_wave:
+            AgMD2_UpdateAttributeViInt32( vi, "SelfTrigger", AGMD2_ATTR_SELF_TRIGGER_MODE, AGMD2_VAL_SELF_TRIGGER_MODE_SQUARE_WAVE )
+            AgMD2_UpdateAttributeViReal64( vi, "SelfTrigger", AGMD2_ATTR_SELF_TRIGGER_SQUARE_WAVE_FREQUENCY, args.self_trigger_wave_frequency )
+            AgMD2_UpdateAttributeViReal64( vi, "SelfTrigger", AGMD2_ATTR_SELF_TRIGGER_SQUARE_WAVE_DUTY_CYCLE, args.self_trigger_wave_duty_cycle )
+        elif args.self_trigger_armed_pulse:
+            try: # Either we have the armed pulse mode and pulse duration attribute, or we revert to AgMD2-2.4 hack
+                AgMD2_UpdateAttributeViInt32( vi, "SelfTrigger", AGMD2_ATTR_SELF_TRIGGER_MODE, AGMD2_VAL_SELF_TRIGGER_MODE_ARMED_PULSE )
+                if args.self_trigger_pulse_duration:
+                    AgMD2_UpdateAttributeViReal64( vi, "SelfTrigger", AGMD2_ATTR_SELF_TRIGGER_PULSE_DURATION, args.self_trigger_pulse_duration )
+            except NameError as e:
+                print( "ERROR for Armed Pulse", e, file=stderr )
+                AgMD2_UpdateAttributeViInt32( vi, "SelfTrigger", AGMD2_ATTR_SELF_TRIGGER_MODE, AGMD2_VAL_SELF_TRIGGER_MODE_SQUARE_WAVE )
+                AgMD2_UpdateAttributeViReal64( vi, "SelfTrigger", AGMD2_ATTR_SELF_TRIGGER_SQUARE_WAVE_FREQUENCY, args.self_trigger_wave_frequency )
+                AgMD2_UpdateAttributeViReal64( vi, "SelfTrigger", AGMD2_ATTR_SELF_TRIGGER_SQUARE_WAVE_DUTY_CYCLE, args.self_trigger_wave_duty_cycle )
+                AgMD2_UpdateAttributeViInt32( vi, "SelfTrigger", AGMD2_ATTR_SELF_TRIGGER_MODE, 2 )#AGMD2_VAL_SELF_TRIGGER_MODE_ARMED_PULSE )
 
 #        from random import randint
 #        for ch in [1, 2, 3, 4, 5, 6, 24, 25, 26, 27, 31, 32]:#+[randint(1, 32) for a in range(12)]:
@@ -274,6 +293,9 @@ def Calibrate( vis, args, loop ):
 
         if args.calibration_signal:
             AgMD2_SetAttributeViString( vi, "", AGMD2_ATTR_PRIVATE_CALIBRATION_USER_SIGNAL, "Signal"+args.calibration_signal )
+
+        if args.trigger_name=="SelfTrigger":
+            AgMD2_SelfTriggerInitiateGeneration( vi, "SelfTrigger" )
 
 
 def Acquire( vis, args, queue, loop ):
@@ -318,6 +340,8 @@ def Acquire( vis, args, queue, loop ):
 
     else:
         for vi in vis:
+            #if args.trigger_name=="SelfTrigger":
+            #    AgMD2_SelfTriggerInitiateGeneration( vi, "SelfTrigger" )
             AgMD2_InitiateAcquisition( vi )
 
         while True:
@@ -346,10 +370,11 @@ def Acquire( vis, args, queue, loop ):
                     if args.wait_failure:
                         raise
                     else:
-                        print( "WaitForAcquisitionComplete: MAX_TIME_EXCEEDED.", file=stderr )
-                        if not _Continue or not queue.empty():
+                        #print( "WaitForAcquisitionComplete: MAX_TIME_EXCEEDED.", file=stderr )
+                        #if not _Continue or not queue.empty():
                             AgMD2_Abort( vi )
-                            return False
+                            _Continue = False
+                            return True#False
 
 
 
@@ -366,19 +391,19 @@ def FetchChannels( vis, args ):
             tsCount = 32*1024
             fetch = AgMD2_StreamFetchDataInt32( vi, "StreamTriggers", tsCount, tsCount )
             if fetch[3] == tsCount:
-                print( "Fetch: ", fetch[1], fetch[2], fetch[3], fetch[4], file=stderr )
+                print( "Fetch: ", 0, fetch[2], fetch[3], fetch[4], file=stderr )
                 with open( "ts.txt", "at" ) as f:
                   for ts in fetch[0][fetch[4]:fetch[4]+fetch[3]].view( 'uint64' ):
-                      print( ts//256, file=f )
+                      print( ts/256, file=f )
             else:
-                print( "Available: ", fetch[1], fetch[2], fetch[3], fetch[4], file=stderr )
+                print( "Available: ", 0, fetch[2], fetch[3], fetch[4], file=stderr )
             chCount = 8*1024*1024
             fetchCh1 = AgMD2_StreamFetchDataInt32( vi, "StreamCh1", chCount, chCount )
             if fetchCh1[3] == chCount:
-                print( "FetchCh1: ", fetchCh1[1], fetchCh1[2], fetchCh1[3], fetchCh1[4], file=stderr )
+                print( "FetchCh1: ", 0, fetchCh1[2], fetchCh1[3], fetchCh1[4], file=stderr )
             fetchCh2 = AgMD2_StreamFetchDataInt32( vi, "StreamCh2", chCount, chCount )
             if fetchCh2[3] == chCount:
-                print( "FetchCh2: ", fetchCh2[1], fetchCh2[2], fetchCh2[3], fetchCh2[4], file=stderr )
+                print( "FetchCh2: ", 0, fetchCh2[2], fetchCh2[3], fetchCh2[4], file=stderr )
         return
     
     if args.mode=='DDC':
@@ -415,9 +440,14 @@ def FetchChannels( vis, args ):
             mrec = AccMultiRecord( checkXOffset=not args.no_check_x_offset, nbrAdcBits=nbrAdcBits )
             #print( "Fetch", file=stderr )
             for ch in args.read_channels:
-                #mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
-                fetch = Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records )
-                #fetch[1] = args.averages
+                try:
+                    #mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
+                    fetch = Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records )
+                    #fetch[1] = args.averages
+                except RuntimeError:
+                    AgMD2_SetAttributeViBoolean( vi, "", AGMD2_ATTR_ERROR_ON_OVERRANGE_ENABLED, False )
+                    fetch = Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records )
+                    AgMD2_SetAttributeViBoolean( vi, "", AGMD2_ATTR_ERROR_ON_OVERRANGE_ENABLED, True )
                 mrec.append( fetch )
 
             try:
