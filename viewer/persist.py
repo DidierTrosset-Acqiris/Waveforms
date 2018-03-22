@@ -46,6 +46,7 @@ def main():
 
     c0 = 0
     for trace in traces:
+        cr0 = 0
         for record in ReadTrace( trace ):
             InitialXOffset = fmod( record.InitialXOffset, record.XIncrement ) if args.zero_delay else record.InitialXOffset
             cr0 = len(record)
