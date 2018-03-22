@@ -83,7 +83,7 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--vertical-range", "-vr",                  type=float, default=None )
         self.add_argument( "--vertical-offset", "-vo",                 type=float, default=None )
 
-        self.add_argument( "--calibration-signal", "-cs",              type=str  , default=None, choices=['Gnd', 'T0', 'Cal100', '100MHz', 'InterleavingDelay'] )
+        self.add_argument( "--calibration-signal", "-cs",              type=str  , default=None, choices=['Gnd', 'T0', 'High', 'Low', 'Square', 'Cal100', '100MHz', 'InterleavingDelay'] )
 
         self.add_argument( "--tsr", "-tsr",                                        default=False, action='store_true' )
 
