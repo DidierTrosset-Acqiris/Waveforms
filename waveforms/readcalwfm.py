@@ -16,6 +16,8 @@ def main():
     parser.add_argument( "--record-decim",  "-rd",  type=int,   default=1   )
     parser.add_argument( "--sample-start",  "-ss",  type=int,   default=0   )
     parser.add_argument( "--sample-count",  "-sc",  type=int,   default=1000000   )
+    parser.add_argument( "--sample-decim",  "-sd",  type=int,   default=1   )
+    parser.add_argument( "--sample-first",  "-sf",  type=int,   default=0   )
     parser.add_argument( "--output",        "-o",   type=str )
     parser.add_argument( "--data-type", "-dt",      type=str,   default="int16", choices=["int8", "int16"] )
     parser.add_argument( "files", nargs='*', type=str )
@@ -37,6 +39,8 @@ def main():
     riDecim = args.record_decim
     siStart = args.sample_start
     siCount = args.sample_count
+    siDecim = args.sample_decim
+    siFirst = args.sample_first
     dataType = int8 if args.data_type=="int8" else int16
 
     recs = []
@@ -69,9 +73,13 @@ def main():
                 continue
             if riCount>0 and ri>=riStart+riCount:
                 break
+            if siDecim>1:
+                recSamples = samples.reshape((siDecim,samples.size//siDecim), order='F')[siFirst]
+            else:
+                recSamples = samples
             rec = Record()
-            rec.append( (samples,
-                          len( samples ),
+            rec.append( (recSamples,
+                          len( recSamples ),
                           0,
                           InitialXOffset,  # InitialXOffset
                           0.0,  # InitialXTimeSeconds
