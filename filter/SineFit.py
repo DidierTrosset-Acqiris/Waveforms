@@ -175,6 +175,9 @@ def main():
     parser.add_argument( "--width",      "-w",   type=int )
     parser.add_argument( "--step",       "-s",   type=int )
     parser.add_argument( "--output",     "-o",   type=str   )
+    parser.add_argument( "--output-comp", "-oc",   default=False, action='store_true' )
+    parser.add_argument( "--output-diff", "-od",   default=False, action='store_true' )
+    parser.add_argument( "--output-sine", "-os",   default=False, action='store_true' )
     parser.add_argument( "files", nargs='*', type=str       )
 
     args = parser.parse_args()
@@ -186,6 +189,9 @@ def main():
 
     out = open( args.output, 'wt' ) if args.output else stdout
 
+    #if args.output_comp or args.output_diff:
+
+
     for trcfile in trcfiles:
         for rec in ReadTrace( trcfile ):
             if hasattr( rec, 'SineFreq' ) or args.sine_freq:
@@ -193,14 +199,21 @@ def main():
                 omega = 2*np.pi*sineFreq*rec.XIncrement
                 fits = SineFit3( rec, omega, width=args.width, step=args.step )
                 omega, offset, amplitude, phase = fits[0]
-                try:
-                    print( offset, amplitude, omega/2/np.pi/rec.XIncrement, *[(fit[3]/2/np.pi/args.sine_freq-rec.InitialXOffset)*1e12 for fit in fits] )
-                except (BrokenPipeError):
-                    return
             else:
                 # SineFit4
-                print( "Broken pipe", file=stderr )
-                pass
+                print( "SineFit without signal frequency information is not supported", file=stderr )
+                continue
+            try:
+                if args.output_sine:
+                    print( offset, amplitude, omega/2/np.pi/rec.XIncrement, *[(fit[3]/2/np.pi/args.sine_freq-rec.InitialXOffset)*1e12 for fit in fits] )
+                elif args.output_comp:
+                    OutputTrace(rec)
+                else:
+                    for omega, offset, amplitude, phase in fits:
+                        print( offset, amplitude, omega/2/np.pi/rec.XIncrement, (phase/2/np.pi/args.sine_freq-rec.InitialXOffset)*1e12 )
+            except (BrokenPipeError):
+                return
+
 
 
 if __name__=="__main__":
