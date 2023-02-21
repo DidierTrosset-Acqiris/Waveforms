@@ -1,0 +1,32 @@
+#!/usr/bin/python3
+
+import sys
+from math import sqrt
+
+count = 0
+minimum = float('inf')
+maximum = -float('inf')
+accumulate = 0.0
+sqaccumulate = 0.0
+
+for i, line in enumerate( sys.stdin ):
+    if i %10 == 0:
+        count = 0
+        minimum = float('inf')
+        maximum = -float('inf')
+        accumulate = 0.0
+        sqaccumulate = 0.0
+
+    value = float( line )
+    count = count + 1
+    if value < minimum: minimum = value
+    if value > maximum: maximum = value
+    accumulate = accumulate + value
+    sqaccumulate = sqaccumulate + value*value
+    mean = accumulate/count
+    deviation = max(0.0, sqaccumulate/count - mean*mean)
+    try:
+        print( value, minimum, maximum, accumulate/count, "%f"%(sqrt(deviation)), flush=True )
+    except BrokenPipeError:
+        break
+
