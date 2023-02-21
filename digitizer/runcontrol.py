@@ -66,13 +66,13 @@ def Apply(*args):
     try:
         records = int( records_var.get() )
         samples = int( samples_var.get() )
-        offset = int( offset_var.get() )
-        fscale = int( fscale_var.get() )
+        offset = float( offset_var.get() )
+        fscale = float( fscale_var.get() )
         json.dump( { "records":records, "samples":samples, "vertical_offset":offset, "vertical_range":fscale }, fp=stdout )
         stdout.write( "\n" )
         stdout.flush()
     except ValueError:
-        pass
+        raise
     
 
 root = Tk()
@@ -103,7 +103,7 @@ offset_var = StringVar()
 offset_var.set( "0" )
 offset_var.trace( "w", Apply )
 fscale_var = StringVar()
-fscale_var.set( "2" )
+fscale_var.set( "0.5" )
 fscale_var.trace( "w", Apply )
 
 offset_entry = EntryWithSpins( mainframe, width=8, textvariable=offset_var )

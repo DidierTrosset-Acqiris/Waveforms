@@ -1,8 +1,10 @@
 #!/usr/bin/python3
 
 from sys import stderr
-from numpy import int8, int16, int32, float64, array, zeros, resize
+from numpy import int8, int16, int32, float64, array, ndarray, zeros, resize
 from waveforms.singlerecord import Record
+import collections
+
 
 
 """
@@ -23,28 +25,32 @@ class Trace:
     """
     class Wave:
         def __init__( self ):
-            self.Samples = None
+            self._Samples = None
 
         def __len__( self ):
-            return len( self.Samples )
+            return len( self._Samples )
 
         def __getitem__( self, index ):
-            return self.Samples[index]
+            return self._Samples[index]
 
         def __iter__( self ):
-            return iter( self.Samples )
+            return iter( self._Samples )
+
+        @property
+        def Samples( self ):
+            return self._Samples
 
     def __init__( self ):
-        self.Waves = []
+        self._Waves = []
 
     def __len__( self ):
-        return len( self.Waves )
+        return len( self._Waves )
 
     def __getitem__( self, index ):
-        return self.Waves[index]
+        return self._Waves[index]
 
     def __iter__( self ):
-        return iter( self.Waves )
+        return iter( self._Waves )
 
 
 def SampleType( dataType ):
@@ -100,7 +106,7 @@ class TraceHandler:
         return line
 
     def trcBegin(self):
-        self.Waves = None
+        self._Waves = None
         self._size = 0
         self._index = 0
         self._chans = 0
@@ -109,15 +115,15 @@ class TraceHandler:
         self.FullScale = 65536
 
     def trcEnd(self, cont):
-        if self._size==0 or not self.Waves or self._index==0:
+        if self._size==0 or not self._Waves or self._index==0:
             return
-        while len( self.trace.Waves )<len( self.Waves ):
-            self.trace.Waves.append( Trace.Wave() )
-        for i in range( len( self.Waves ) ):
-            self.Waves[i].resize( self._index )
-            self.trace.Waves[i].Samples = self.Waves[i]
-        self.trace.ActualChannels = len( self.trace.Waves )
-        self.trace.ActualPoints = len( self.trace.Waves[0].Samples )
+        while len( self.trace._Waves )<len( self._Waves ):
+            self.trace._Waves.append( Trace.Wave() )
+        for i in range( len( self._Waves ) ):
+            self._Waves[i].resize( self._index )
+            self.trace._Waves[i]._Samples = self._Waves[i]
+        self.trace.ActualChannels = len( self.trace._Waves )
+        self.trace.ActualPoints = len( self.trace._Waves[0]._Samples )
         self.is_valid = True
 
     def trcAttribute(self, strKey, strValue):
@@ -163,46 +169,46 @@ class TraceHandler:
 
     def trcWaveAttribute(self, index, strKey, strValue):
         assert index>=0
-        while len( self.trace.Waves )<=index:
-            self.trace.Waves.append( Trace.Wave() )
+        while len( self.trace._Waves )<=index:
+            self.trace._Waves.append( Trace.Wave() )
         if strKey=='ScaleFactor':
-            self.trace.Waves[index].ScaleFactor = float( strValue )
+            self.trace._Waves[index].ScaleFactor = float( strValue )
         elif strKey=='ScaleOffset':
-            self.trace.Waves[index].ScaleOffset = float( strValue )
+            self.trace._Waves[index].ScaleOffset = float( strValue )
         else:
             try:
-                setattr( self.trace.Waves[index], strKey, strValue )
+                setattr( self.trace._Waves[index], strKey, strValue )
             except:
                 print( "ERROR:", "Cannot process attribute", strKey, "index", index, "value", strValue, file=stderr )
 
     def _initWaves( self, sampleType, nbrChannels ):
-        assert self.Waves is None
+        assert self._Waves is None
         self._dtype = DataType( sampleType )
-        self._stype = float if self.dtype==float64 else int
+        isfloat = self._dtype == float64
+        self._stype = float if isfloat else int
         self._size = 1024
         self._index = 0
         self._chans = nbrChannels
-        self.Waves = [ zeros( self._size, dtype=self._dtype ) for _ in range( self._chans ) ]
+        self._Waves = [ zeros( self._size, dtype=self._dtype ) for _ in range( self._chans ) ]
 
     def _resizeWaves( self ):
-        assert self.Waves is not None
+        assert self._Waves is not None
         assert self._stype is not None
         assert self._dtype is not None
         self._size = self._size*2
-        for i in range( len( self.Waves ) ):
-            self.Waves[i].resize( self._size )
+        for i in range( len( self._Waves ) ):
+            self._Waves[i].resize( self._size )
 
     def trcSamples(self, strLine):
         values = strLine.split()
-        if not self.Waves:
+        if not self._Waves:
             self._initWaves( self.sampleType, len( values ) )
         if self._index>=self._size:
             self._resizeWaves()
         try:
             for record, value in enumerate( values ):
-                self.Waves[record][self._index] = self._stype( value )
+                self._Waves[record][self._index] = self._stype( value )
         except:
-            print( "ERROR:", "Cannot understand samples", strLine, file=stderr )
             raise
         finally:
             self._index = self._index+1
@@ -312,11 +318,11 @@ def _test_ReadTrace( f ):
     ... '''
     >>> f = StringIO( trace )
     >>> for trc in ReadTrace( f ):
-    ...    print( len( trc.Waves ) )
+    ...    print( len( trc._Waves ) )
     ...    print( trc.ActualChannels, trc.ActualPoints, trc.InitialXOffset, trc.InitialXTimeSeconds, trc.InitialXTimeFraction, trc.XIncrement )
     ...    for wfm in trc:
     ...        print( wfm.ScaleFactor, wfm.ScaleOffset )
-    ...        print( wfm.Samples )
+    ...        print( wfm._Samples )
     2
     2 32 -7.93457e-11 0.0 0.002 6.25e-10
     1.52587890625e-05 0.0
@@ -391,10 +397,10 @@ def _test_ReadTrace( f ):
     ... '''
     >>> f = StringIO( trace )
     >>> for trc in ReadTrace( f ):
-    ...    print( len( trc.Waves ) )
+    ...    print( len( trc._Waves ) )
     ...    print( trc.ActualChannels, trc.ActualPoints, trc.InitialXOffset, trc.XIncrement )
     ...    for wfm in trc:
-    ...        print( wfm.Samples )
+    ...        print( wfm._Samples )
     2
     2 8 -7.93456e-11 6.25e-10
     [-2243  3171  8093 11667 13533 13203 10973  6947]
@@ -491,12 +497,12 @@ def _test_OutputTrace( records, file ):
     $TraceType Digitizer
     $SampleType Int16
     $FullScale 65536
-    $ActualChannels 2
     $Model U5303A
     $XIncrement 6.25e-10
     $InitialXOffset -7e-11
     $InitialXTimeSeconds 0.0
     $InitialXTimeFraction 0.002
+    $ActualChannels 2
     $$ScaleFactor 0 6.103515625e-05
     $$ScaleOffset 0 0.0
     $$ScaleFactor 1 3.0517578125e-05
@@ -515,60 +521,71 @@ def _test_OutputTrace( records, file ):
     """
 
 
-def OutputTraces( traces, file, Model=None, FirstRecord=None, NbrRecords=None, NbrSamples=None ):
+def OutputTraces( traces, file, Model=None, FirstRecord=None, NbrRecords=None, NbrSamples=None, FirstSample=None ):
     LastRecord = FirstRecord+NbrRecords if FirstRecord and NbrRecords else NbrRecords if NbrRecords else None
     for index, trace in enumerate( traces ):
         if FirstRecord and index<FirstRecord:
             continue
         if LastRecord and index>=LastRecord:
             break
-        OutputTrace( trace, file=file, Model=Model, NbrSamples=NbrSamples )
+        OutputTrace( trace, file=file, Model=Model, NbrSamples=NbrSamples, FirstSample=FirstSample )
 
 
-def OutputTrace( trace, file, Model=None, NbrSamples=None ):
+def OutputTrace( trace, file, Model=None, NbrSamples=None, FirstSample=None ):
     """ Write the given Trace to the given file object.
     """
-    try:
-        sampleType = getattr( trace, 'SampleType', SampleType( trace[0].Samples.dtype ) )
-        print( "$TraceType", trace.TraceType, file=file )
-        print( "$SampleType", sampleType, file=file )
-        if hasattr( trace, 'NbrAdcBits' ) and trace.NbrAdcBits: print( "$NbrAdcBits", trace.NbrAdcBits, file=file )
-        if hasattr( trace, 'FullScale' ) and trace.FullScale: print( "$FullScale", trace.FullScale, file=file )
-        if Model: print( "$Model", Model, file=file )
-        print( "$XIncrement", trace.XIncrement, file=file )
-        print( "$InitialXOffset", trace.InitialXOffset, file=file )
-        print( "$InitialXTimeSeconds", format( trace.InitialXTimeSeconds, '.1f' ) if isinstance( trace.InitialXTimeSeconds, float ) else trace.InitialXTimeSeconds, file=file )
-        print( "$InitialXTimeFraction", format( trace.InitialXTimeFraction, '.8f' ) if isinstance( trace.InitialXTimeFraction, float ) else trace.InitialXTimeFraction, file=file )
+    sampleType = getattr( trace, 'SampleType', SampleType( trace[0].Samples.dtype ) )
+    try: sampleType = getattr( trace, 'SampleType', SampleType( trace[0].Samples.dtype ) )
+    except: sampleType = getattr( trace, 'SampleType', SampleType( trace.Samples.dtype ) )
+    if hasattr( trace, 'TraceType' ): print( "$TraceType", trace.TraceType, file=file )
+    print( "$SampleType", sampleType, file=file )
+    if hasattr( trace, 'NbrAdcBits' ) and trace.NbrAdcBits: print( "$NbrAdcBits", 13 if trace.NbrAdcBits==12 and trace.TraceType=="Accumulated" else trace.NbrAdcBits, file=file )
+    if hasattr( trace, 'FullScale' ) and trace.FullScale: print( "$FullScale", trace.FullScale, file=file )
+    if Model: print( "$Model", Model, file=file )
+    print( "$XIncrement", trace.XIncrement, file=file )
+    print( "$InitialXOffset", trace.InitialXOffset, file=file )
+    if hasattr( trace, 'InitialXTimeSeconds' ): print( "$InitialXTimeSeconds", format( trace.InitialXTimeSeconds, '.1f' ) if isinstance( trace.InitialXTimeSeconds, float ) else trace.InitialXTimeSeconds, file=file )
+    if hasattr( trace, 'InitialXTimeFraction' ): print( "$InitialXTimeFraction", format( trace.InitialXTimeFraction, '.9f' ) if isinstance( trace.InitialXTimeFraction, float ) else trace.InitialXTimeFraction, file=file )
 
-        nbrChannels = len( trace )
-        print( "$ActualChannels", len( trace ), file=file );
-        for index, wave in enumerate( trace ):
-            print( "$$ScaleFactor", index, wave.ScaleFactor, file=file )
-            print( "$$ScaleOffset", index, wave.ScaleOffset, file=file )
-        try: print( "$ActualAverages", trace.ActualAverages, file=file )
-        except: pass
+    try: nbrChannels = len( trace )
+    except: nbrChannels = 1
+    print( "$ActualChannels", nbrChannels, file=file );
+#    for index, wave in enumerate( trace ):
+#        if hasattr( wave, 'ScaleFactor' ): print( "$$ScaleFactor", index, wave.ScaleFactor, file=file )
+#        if hasattr( wave, 'ScaleOffset' ): print( "$$ScaleOffset", index, wave.ScaleOffset, file=file )
+    try: print( "$ActualAverages", trace.ActualAverages, file=file )
+    except: pass
+    for a in dir(trace):
+        if isinstance(a, (collections.Sequence, ndarray)): continue
+        if a.startswith( '__' ): continue
+        if a.startswith( '_' ): continue
+        if a.startswith( 'Wave' ): continue
+        if a.startswith( 'NbrAdcBits' ): continue
+        if a.startswith( 'Samples' ): continue
+        if a.startswith( 'ScaleOffset' ): continue
+        if a.startswith( 'ScaleFactor' ): continue
+        if a.startswith( 'XIncrement' ): continue
+        if a.startswith( 'TraceType' ): continue
+        if a.startswith( 'RecordSize' ): continue
+        if a.startswith( 'ActualRecords' ): continue
+        if a.startswith( 'InitialXOffset' ): continue
+        if a.startswith( 'InitialXTimeSeconds' ): continue
+        if a.startswith( 'InitialXTimeFraction' ): continue
+        print( "$%s"%a, getattr( trace, a ), file=file );
+
+    try:
+        for index, sample in enumerate( trace.Samples[FirstSample:] ):
+            if NbrSamples and index>=NbrSamples:
+                break
+            file.write( str( sample )+"\n" )
+    except AttributeError:
+      try:
         for index, samples in enumerate( zip( *trace ) ):
             if NbrSamples and index>=NbrSamples:
                 break
             file.write( " ".join( map( str, samples ) )+"\n" )
-    except TypeError:
-        sampleType = getattr( trace, 'SampleType', SampleType( trace.Samples.dtype ) )
-        print( "$TraceType", trace.TraceType, file=file )
-        print( "$SampleType", sampleType, file=file )
-        if hasattr( trace, 'NbrAdcBits' ) and trace.NbrAdcBits: print( "$NbrAdcBits", trace.NbrAdcBits, file=file )
-        if hasattr( trace, 'FullScale' ) and trace.FullScale: print( "$FullScale", trace.FullScale, file=file )
-        if Model: print( "$Model", Model, file=file )
-        print( "$XIncrement", trace.XIncrement, file=file )
-        print( "$InitialXOffset", trace.InitialXOffset, file=file )
-        print( "$InitialXTimeSeconds", format( trace.InitialXTimeSeconds, '.1f' ) if isinstance( trace.InitialXTimeSeconds, float ) else trace.InitialXTimeSeconds, file=file )
-        print( "$InitialXTimeFraction", format( trace.InitialXTimeFraction, '.8f' ) if isinstance( trace.InitialXTimeFraction, float ) else trace.InitialXTimeFraction, file=file )
-
-        print( "$ActualChannels", 1, file=file );
-        print( "$$ScaleFactor", 0, trace.ScaleFactor, file=file )
-        print( "$$ScaleOffset", 0, trace.ScaleOffset, file=file )
-        try: print( "$ActualAverages", trace.ActualAverages, file=file )
-        except: pass
-        for index, sample in enumerate( trace.Samples ):
+      except TypeError:
+        for index, sample in enumerate( trace._Samples[FirstSample:] ):
             if NbrSamples and index>=NbrSamples:
                 break
             file.write( str( sample )+"\n" )

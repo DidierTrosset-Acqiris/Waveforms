@@ -77,7 +77,7 @@ def main():
                 recSamples = samples.reshape((siDecim,samples.size//siDecim), order='F')[siFirst]
             else:
                 recSamples = samples
-            rec = Record()
+            rec = Record( FullScale=256 if dataType==int8 else 65536 )
             rec.append( (recSamples,
                           len( recSamples ),
                           0,

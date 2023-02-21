@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 from sys import stderr, stdin, stdout
-from waveforms.trace import ReadTrace
+from waveforms.trace import ReadTrace, OutputTrace
 from argparse import ArgumentParser
 import numpy as np
 import math
@@ -178,6 +178,7 @@ def main():
     parser.add_argument( "--output-comp", "-oc",   default=False, action='store_true' )
     parser.add_argument( "--output-diff", "-od",   default=False, action='store_true' )
     parser.add_argument( "--output-sine", "-os",   default=False, action='store_true' )
+    parser.add_argument( "--minimum-amplitude", "-mina", type=float )
     parser.add_argument( "files", nargs='*', type=str       )
 
     args = parser.parse_args()
@@ -192,6 +193,7 @@ def main():
     #if args.output_comp or args.output_diff:
 
 
+    nbrErr = 0
     for trcfile in trcfiles:
         for rec in ReadTrace( trcfile ):
             if hasattr( rec, 'SineFreq' ) or args.sine_freq:
@@ -211,6 +213,13 @@ def main():
                 else:
                     for omega, offset, amplitude, phase in fits:
                         print( offset, amplitude, omega/2/np.pi/rec.XIncrement, (phase/2/np.pi/args.sine_freq-rec.InitialXOffset)*1e12 )
+                        if args.minimum_amplitude and amplitude < args.minimum_amplitude:
+                            fname = "SineFit-Error-%02d.trc"%( nbrErr )
+                            print( "ERROR: amplitude is too low. Output trace in", fname )
+                            OutputTrace( rec, open( fname, 'wt' ) )
+                            nbrErr = nbrErr+1
+                            if nbrErr == 100:
+                                return
             except (BrokenPipeError):
                 return
 

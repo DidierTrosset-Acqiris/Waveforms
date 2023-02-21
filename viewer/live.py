@@ -13,6 +13,7 @@ from queue import Queue
 import socket
 import sys
 import os
+import re
 from os.path import expanduser
 import math
 import time
@@ -21,8 +22,8 @@ import warnings
 
 # Try to import SciPy, disables calculations if not
 try:
-    from scipy import arange, array, double, fft, linspace, log10, pi, polyfit, optimize, sin, sqrt
-    from numpy import maximum, minimum
+    from scipy import arange, array, double, fft, log10, pi, polyfit, optimize, sin, sqrt
+    from numpy import maximum, minimum, linspace
     USE_SCIPY = 1
 except ImportError:
     sys.stderr.write("Live Viewer requires scipy for better experience. See http://www.scipy.org/\n")
@@ -360,7 +361,7 @@ def CalculateTrace(trace):
             trace.fittedSine = None
     # Calculate FFT
     trace.nbrFftSamples = trace.ActualPoints if trace.ActualPoints<65536 else 65536
-    CalcFourier(trace, trace.nbrFftSamples)
+#    CalcFourier(trace, trace.nbrFftSamples)
     # Calculate ratios
     trace.ratios = None
     if ShowRatios:
@@ -464,7 +465,9 @@ def ShowImages(trace):
     if USE_SCIPY:
         nbrChannels = len( trace )
         if ShowSignal:
-            if linesSignals and len( linesSignals )>0 and linesSignals[0] and len(linesSignals[0].get_xdata()) != len( trace[0] ):
+            if linesSignals and len( linesSignals )>0 and linesSignals[0] and \
+                    (   len(linesSignals[0].get_xdata()) != len( trace[0] ) \
+                     or (linesSignals[0].get_xdata()[1] - linesSignals[0].get_xdata()[0]) != trace.XIncrement   ):
                 plotSignal.clear()
                 linesSignals = []
                 minSignals = []
@@ -486,8 +489,9 @@ def ShowImages(trace):
                 if plotMinSignal:
                     if not lineMinSignals[ch] or len(lineMinSignals[ch].get_xdata()) != len(minSignals[ch]):
                         minSignals[ch] = wfm.Samples
-                        timeFull = trace.XIncrement * trace.ActualPoints * 1e6
-                        time = linspace(0.0, timeFull - (timeFull / trace.ActualPoints), trace.ActualPoints)
+                        timeFirst = 0.0 if trace.InitialXOffset == 0.0 else -trace.XIncrement*1e6
+                        timeFull  = trace.XIncrement * ( trace.ActualPoints-1 ) * 1e6 - timeFirst
+                        time = linspace(timeFirst, timeFull, trace.ActualPoints)
                         try: lineMinSignals[ch], = plotMinSignal.plot(time, minSignals[ch], color=_GetColor(ch, light=True))
                         except: pass
                     elif spectrumReset:
@@ -498,8 +502,9 @@ def ShowImages(trace):
                 if plotMaxSignal:
                     if not lineMaxSignals[ch] or len(lineMaxSignals[ch].get_xdata()) != len(maxSignals[ch]):
                         maxSignals[ch] = wfm.Samples
-                        timeFull = trace.XIncrement * trace.ActualPoints * 1e6
-                        time = linspace(0.0, timeFull - (timeFull / trace.ActualPoints), trace.ActualPoints)
+                        timeFirst = 0.0 if trace.InitialXOffset == 0.0 else -trace.XIncrement*1e6
+                        timeFull = trace.XIncrement * ( trace.ActualPoints-1 ) * 1e6 - timeFirst
+                        time = linspace(timeFirst, timeFull , trace.ActualPoints)
                         try: lineMaxSignals[ch], = plotMaxSignal.plot(time, maxSignals[ch], color=_GetColor(ch, light=True))
                         except: pass
                     elif spectrumReset:
@@ -511,11 +516,12 @@ def ShowImages(trace):
                     plotSignal.set_title('Signal (us)')
                     plotSignal.set_ylabel('magnitude')
                     plotSignal.grid( which='both', linestyle='-' )
-                    timeFull = trace.XIncrement * trace.ActualPoints * 1e6
-                    time = linspace(0.0, timeFull - (timeFull / trace.ActualPoints), trace.ActualPoints)
+                    timeFirst = -trace.XIncrement*1e6 #0.0 if trace.InitialXOffset == 0.0 else -trace.XIncrement*1e6
+                    timeFull = trace.XIncrement * ( trace.ActualPoints-1 ) * 1e6 - timeFirst
+                    time = linspace(timeFirst, timeFull, trace.ActualPoints)
                     time = time + trace.InitialXOffset%trace.XIncrement * 1e6
                     linesSignals[ch], = plotSignal.plot(time, wfm.Samples, color=_GetColor(ch), marker=marker)
-                    plotSignal.get_xaxis().axes.set_xlim(0, timeFull - (timeFull / trace.ActualPoints))
+                    plotSignal.get_xaxis().axes.set_xlim(timeFirst, timeFull)
                     try:
                         yscale = 2**trace.NbrAdcBits * trace.ActualAverages
                         ylim = ( 0, yscale )
@@ -526,10 +532,12 @@ def ShowImages(trace):
                         else:
                             ylim = (-yscale/2, yscale/2)
                     plotSignal.get_yaxis().axes.set_ylim(*ylim)
+                    plotSignal.get_yaxis().axes.set_yticks([ylim[0]+n*yscale/8 for n in range(0, 8)] + [ylim[1]])
                 else:
                     if trace.InitialXOffset!=0.0:
-                        timeFull = trace.XIncrement * trace.ActualPoints * 1e6
-                        time = linspace(0.0, timeFull - (timeFull / trace.ActualPoints), trace.ActualPoints)
+                        timeFirst = 0.0 if trace.InitialXOffset == 0.0 else -trace.XIncrement*1e6
+                        timeFull = trace.XIncrement * ( trace.ActualPoints-1 ) * 1e6 - timeFirst
+                        time = linspace(timeFirst, timeFull, trace.ActualPoints)
                         time = time + trace.InitialXOffset%trace.XIncrement * 1e6
                         linesSignals[ch].set_xdata(time)
                     linesSignals[ch].set_ydata( wfm.Samples )
@@ -614,7 +622,7 @@ def ReadInput( queue ):
             while not queue.empty():
                 queue.get_nowait()
         queue.put( trace )
-        #time.sleep( 1e-3 )
+        time.sleep( 1e-3 )
 
 
 def Update():

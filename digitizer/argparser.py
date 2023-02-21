@@ -14,21 +14,28 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "resources",                    nargs='+',  type=str )
 
         self.add_argument( "--reset",                                              default=False, action='store_true' )
+        self.add_argument( "--reset-period", "-rp",                    type=int )
+        self.add_argument( "--info-driver", "-id",                                 default=False, action='store_true' )
         self.add_argument( "--info-cores", "-ic",                                  default=False, action='store_true' )
 
         self.add_argument( "--loops", "-l",                            type=int,   default=-1 )
         self.add_argument( "--records", "-r",                          type=int,   default=1 )
         self.add_argument( "--samples", "-s",                          type=int,   default=200 )
         self.add_argument( "--averages", "-a",                         type=int,   default=1 )
-        self.add_argument( "--mode", "-m",                             type=str,   default='DGT', choices=['DGT', 'DDC', 'AVG'] )
+        self.add_argument( "--mode", "-m",                             type=str,   default='DGT', choices=['DGT', 'DDC', 'AVG', 'CFW'] )
+        self.add_argument( "--acquire-none", "-an",                                default=False, action='store_true' )
 
         self.add_argument( "--streaming-continuous", "-csr",                       default=False, action='store_true' )
         self.add_argument( "--streaming-triggered", "-cst",                        default=False, action='store_true' )
+        self.add_argument( "--data-truncation", "-dt",                 type=int,   default=0 )
 
         self.add_argument( "--no-calibrate", "-nc",                                default=False, action='store_true' )
-        self.add_argument( "--calibrate-fast", "-cf",                              default=False, action='store_true' )
+        self.add_argument( "--calibrate-fast", "-cfast",                           default=False, action='store_true' )
         self.add_argument( "--calibrate-channel", "-cc",   nargs='?',  type=int,   default=0 )
         self.add_argument( "--calibrate-period", "-cp",    nargs=None, type=int )
+        self.add_argument( "--calibrate-always", "-ca",                            default=False, action='store_true' )
+        self.add_argument( "--calibrate-once", "-co",                              default=False, action='store_true' )
+        self.add_argument( "--calibrate-fails", "-cf",                             default=False, action='store_true' )
         self.add_argument( "--cal-offset-target", "-cot",              type=float )
 
         grps = self.add_mutually_exclusive_group()
@@ -60,7 +67,7 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--trigger-output-offset", "-too", nargs=None, type=float, default=None )
 
         self.add_argument( "--self-trigger-square-wave", "-stsw",                  default=False, action='store_true' )
-        self.add_argument( "--self-trigger-wave-frequency", "-stwf",   nargs=None, type=float, default=1e3 )
+        self.add_argument( "--self-trigger-wave-frequency", "-stwf",   nargs=None, type=float, default=1e4 )
         self.add_argument( "--self-trigger-wave-duty-cycle", "-stwdc", nargs=None, type=float, default=0.1 )
 
         self.add_argument( "--self-trigger-armed-pulse", "-stap",                  default=False, action='store_true' )
@@ -73,17 +80,31 @@ class DigitizerParser( ArgumentParser ):
 
         self.add_argument( "--read-records", "-rr",        nargs=None, type=int,   default=None )
         self.add_argument( "--read-samples", "-rs",        nargs=None, type=int,   default=None )
-        self.add_argument( "--read-type", "-rt",           nargs=None, type=str,   default=None, choices=['int8', 'int16', 'int32', 'real64'] )
+        self.add_argument( "--read-type", "-rt",           nargs=None, type=str,   default=None, choices=['int8', 'int16', 'int32', 'real64', 'float64'] )
         self.add_argument( "--read-channels", "-rc",       nargs='*',  type=int,   default=[1] )
 
         self.add_argument( "--output-1st-record", "-o1r",  nargs=None, type=int,   default=None )
         self.add_argument( "--output-records", "-or",      nargs=None, type=int,   default=None )
+        self.add_argument( "--output-1st-sample", "-o1s",  nargs=None, type=int,   default=None )
         self.add_argument( "--output-samples", "-os",      nargs=None, type=int,   default=None )
+        self.add_argument( "--output-info", "-oi",                                 default=False, action='store_true' )
 
+        self.add_argument( "--disable-channel1", "-dc1",                           default=False, action='store_true' )
+        self.add_argument( "--disable-channel2", "-dc2",                           default=False, action='store_true' )
         self.add_argument( "--vertical-range", "-vr",                  type=float, default=None )
         self.add_argument( "--vertical-offset", "-vo",                 type=float, default=None )
 
-        self.add_argument( "--calibration-signal", "-cs",              type=str  , default=None, choices=['Gnd', 'T0', 'High', 'Low', 'Square', 'Cal100', '100MHz', 'InterleavingDelay'] )
+        self.add_argument( "--input-max-frequency", "-imf",            type=float, default=None )
+        self.add_argument( "--bypass-anti-aliasing", "-baa",                       default=None, action='store_true' )
+
+        self.add_argument( "--calibration-signal", "-cs",              type=str  , default=None, choices=['Gnd', 'T0', 'High', 'Low', 'Square', 'Cal100', '100MHz', 'InterleavingDelay', 'AcPhase', 'SelfTrigger'] )
+
+        self.add_argument( "--zero-suppress", "-zs",                               default=False, action='store_true' )
+        self.add_argument( "--zs-threshold", "-zsth",      nargs=None, type=int,   default=None )
+        self.add_argument( "--zs-hysteresis", "-zshy",     nargs=None, type=int,   default=None )
+        self.add_argument( "--zs-zero-value", "-zszv",     nargs=None, type=int,   default=None )
+        self.add_argument( "--pre-gate-samples", "-zsgb",  nargs=None, type=int,   default=None )
+        self.add_argument( "--post-gate-samples", "-zsga", nargs=None, type=int,   default=None )
 
         self.add_argument( "--tsr", "-tsr",                                        default=False, action='store_true' )
 
@@ -97,6 +118,18 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--ddc-sample-view", "-dsv",                type=str,   default="REAL", choices=['REAL', 'IMAGINARY', 'COMPLEX', 'PHASE'] )
 
         self.add_argument( "--no-check-x-offset", "-ncxo",                         default=False, action='store_true' )
+
+        self.add_argument( "--data-inversion", "-di",                              default=False, action='store_true' )
+
+        self.add_argument( "--equalization", "-eq",                    type=str,   default=None,  choices=['Smooth', 'Sharp', 'NoEq', 'Custom'] )
+
+        self.add_argument( "--timestamp-reset", "-tsrs",               type=str,   default=None,  choices=['Immediate', 'OnInitiate', 'OnFirstTrigger'] )
+
+        self.add_argument( "--no-digital-gain", "-ndg",                            default=False, action='store_true' )
+        self.add_argument( "--no-adc-lut", "-nal",                                 default=False, action='store_true' )
+        self.add_argument( "--no-ric-filter", "-nrf",                              default=False, action='store_true' )
+
+        self.add_argument( "--retain-power-on-close", "-rpoc",                     default=None, action='store_true' )
 
 
     def parse_args( self, *largs, **kwargs ):

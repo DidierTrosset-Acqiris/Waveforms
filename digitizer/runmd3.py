@@ -3,7 +3,7 @@
 """
     Runs continuous acquisitions
 
-    Copyright (C) Acqiris SA 2017
+    Copyright (C) Acqiris SA 2017-2023
    
     Started: September 27th, 2017
     By:      Didier Trosset
@@ -21,14 +21,27 @@ from time import sleep
 from signal import signal, SIGTERM, SIGINT
 from threading import Thread
 from queue import Queue
+from numpy import empty, int8, int16, float64
+from datetime import datetime
 import json
 
+class InitOptions:
+    def __init__( self ):
+        self.stdopts = []
+        self.drvstps = []
+    def __str__( self ):
+        if len(self.drvstps) == 0:
+            return ", ".join( self.stdopts )
+        return ", ".join( self.stdopts+["DriverSetup="] ) + ", ".join( self.drvstps )
 
-def Initialize( args, options ):
+
+def Initialize( args, initopts ):
     """ Initializes all the given resources using InitWithOptions,
         using the given options string.
         @return the list of vi.
     """
+    if not isinstance( initopts, InitOptions ):
+        raise RuntimeError("Init Options wrong type")
     reset = 1 if args.reset else 0
     resources = args.resources
     if isinstance( resources, str ):
@@ -38,19 +51,23 @@ def Initialize( args, options ):
         for rsrc in resources:
             if rsrc[:3]=="SIM":
                 model = rsrc[5:11]
-                options = "Simulate=1, DriverSetup= Model="+model
+                initopts.stdopts.append( "Simulate=1" )
+                initopts.drvstps.append( "Model="+model )
                 rsrc = ""
                 print( "INIT:", rsrc, model, file=stderr )
-            vi = AqMD3( rsrc, 0, reset, options )
+            if args.retain_power_on_close:
+                initopts.drvstps.append( "RetainPowerOnClose=1" )
+            vi = AqMD3( rsrc, 0, reset, str(initopts) )
             vis.append( vi )
             # Always set private access.
-            vi.Private.PrivateAccessPassword = "We1ssh0rn"
-            #print( "Driver:  ", vi.Identity.Description, file=stderr )
-            print( "IOLS:    ", vi.InstrumentInfo.IOVersion, file=stderr )
-            print( "Model:   ", vi.Identity.InstrumentModel, file=stderr )
-            print( "Serial:  ", vi.InstrumentInfo.SerialNumberString, file=stderr )
-            print( "Options: ", vi.InstrumentInfo.Options, file=stderr )
-            print( "Firmware:", vi.Identity.InstrumentFirmwareRevision, file=stderr )
+            vi.Private.PrivateAccessPassword = "w31ss#orN2"
+            if args.info_driver:
+                #print( "Driver:  ", vi.Identity.Description, file=stderr )
+                #print( "IOLS:    ", vi.InstrumentInfo.IOVersion, file=stderr )
+                print( "Model:   ", vi.Identity.InstrumentModel, file=stderr )
+                print( "Serial:  ", vi.InstrumentInfo.SerialNumberString, file=stderr )
+                print( "Options: ", vi.InstrumentInfo.Options, file=stderr )
+                print( "Firmware:", vi.Identity.InstrumentFirmwareRevision, file=stderr )
             if args.info_cores:
                 def PrintCoreVersion( vi, msg, core ):
                     try:
@@ -97,6 +114,15 @@ def ShowInfo( vis ):
         print( "Options: ", vi.InstrumentInfo.Options, file=stderr )
         print( "Firmware:", vi.Identity.InstrumentFirmwareRevision, file=stderr )
 
+def Reset( vis ):
+    if isinstance( vis, int ):
+        vis = [vis]
+    for vi in vis:
+        for vi in vis:
+            vi.Utility.ResetWithDefaults()
+
+
+lastFirmwareRevision = None
 
 def ApplyArgs( vis, args ):
     if isinstance( vis, int ):
@@ -113,6 +139,7 @@ def ApplyArgs( vis, args ):
             vi.SampleClock.Source = SampleClockSource.Internal
             if args.clock_ref_external:
                 vi.ReferenceOscillator.Source = ReferenceOscillatorSource.External
+                vi.ReferenceOscillator.ExternalFrequency = 10e6
             elif args.clock_ref_pxi:
                 vi.ReferenceOscillator.Source = ReferenceOscillatorSource.PxiExpressClk100
             elif args.clock_ref_axie:
@@ -120,7 +147,21 @@ def ApplyArgs( vis, args ):
             else:
                 vi.ReferenceOscillator.Source = ReferenceOscillatorSource.Internal
 
-        # Manages acquisition mode
+        # Manages sample rate
+        if args.sampling_frequency:
+            vi.Acquisition.SampleRate = args.sampling_frequency
+
+        if args.disable_channel1:
+            vi.Channels["Channel1"].Enabled = False
+        if args.disable_channel2:
+            vi.Channels["Channel2"].Enabled = False
+
+        # Manages TSR
+        if args.tsr:
+            vi.Acquisition.NumberOfAverages = args.averages
+            vi.Acquisition.TSR.Enabled = args.tsr
+
+        # Manages acquisition mode DDC
         if args.mode=='DDC':
             vi.Acquisition.Mode = AcquisitionMode.DownConversion
             for ddcCore in vi.DDCCores:
@@ -130,26 +171,34 @@ def ApplyArgs( vis, args ):
                 if args.ddc_decimation_denominator:
                     ddcCore.DecimationDenominator = args.ddc_decimation_denominator
 
-        if args.mode=='AVG':
-            vi.Acquisition.Mode = AcquisitionMode.Averager
-            vi.Acquisition.NumberOfAverages = args.averages
-
         # Manages conbination
         if args.interleave:
             ch, sub = args.interleave[:2]
             vi.Channels["Channel%d"%( ch )].TimeInterleavedChannelList = "Channel%d"%( sub )
+        else:
+            for ch in vi.Channels:
+                ch.TimeInterleavedChannelList = ""
+        args.sampling_frequency = vi.Acquisition.SampleRate # Get SampleRate from instrument as it may have been changed by the interleaving
 
-        # Manages TSR
-        if args.tsr:
-            vi.Acquisition.TSR.Enabled = args.tsr
+        # Manages acquisition mode AVG
+        if args.mode=='AVG':
+            vi.Acquisition.Mode = AcquisitionMode.Averager
+            vi.Acquisition.NumberOfAverages = args.averages
+        elif args.mode=='DGT':
+            vi.Acquisition.Mode = AcquisitionMode.Normal
 
         # Manages streaming
         if args.streaming_continuous or args.streaming_triggered:
-            vi.Acquisition.Streaming.Mode = StreamingMode.Continuous if args.streaming_continuous else StreamingMode.Triggerred
+            vi.Acquisition.Streaming.Mode = StreamingMode.Continuous if args.streaming_continuous else StreamingMode.Triggered
+            if args.data_truncation:
+                for st in [vi.Streams[0]]:
+                    if st.Type == StreamType.Samples:
+                        st.Samples.DataTruncationEnabled = True
+                        st.Samples.DataTruncationBitCount = args.data_truncation
+        else:
+            vi.Acquisition.Streaming.Mode = StreamingMode.Disabled
 
-        # Manages sample rate
-        if args.sampling_frequency:
-            vi.Acquisition.SampleRate = args.sampling_frequency
+        # Manages records
         vi.Acquisition.RecordSize = args.samples
         vi.Acquisition.NumberOfRecordsToAcquire = args.records
         assert args.records == vi.Acquisition.NumberOfRecordsToAcquire
@@ -157,6 +206,8 @@ def ApplyArgs( vis, args ):
         # Manages trigger
         if args.immediate_trigger:
             ActiveTrigger = "Immediate"
+            if args.trigger_level!=None:
+                vi.Trigger.Sources["Internal1"].Level = args.trigger_level
         else:
             if args.trigger_name:
                 ActiveTrigger = args.trigger_name
@@ -172,33 +223,60 @@ def ApplyArgs( vis, args ):
             if args.trigger_delay!=None:
                 vi.Trigger.Delay = args.trigger_delay
             if args.trigger_slope!=None:
-                vi.Trigger.Sources[ActiveTrigger].Slope = TriggerSlope.Negative if args.trigger_slope in ["negative", "n"] else TriggerSlope.Positive
+                vi.Trigger.Sources[ActiveTrigger].Edge.Slope = TriggerSlope.Negative if args.trigger_slope in ["negative", "n"] else TriggerSlope.Positive
 
         vi.Trigger.ActiveSource = ActiveTrigger
 
-        if args.trigger_output_enabled!=None:
-            vi.Trigger.OutputEnabled = args.trigger_output_enabled
+#        if args.trigger_output_enabled!=None:
+#            vi.Trigger.OutputEnabled = args.trigger_output_enabled
         if args.trigger_output_source!=None:
             vi.Trigger.Output.Source = args.trigger_output_source
         if args.trigger_output_offset!=None:
             vi.Trigger.Output.Offset = args.trigger_output_offset
 
+        # Manages ZeroSuppress
+        if args.zero_suppress:
+            vi.Acquisition.DataReductionMode = DataReductionMode.ZeroSuppress
+            for ch in vi.Channels:
+                ch.ZeroSuppress.Threshold =       0   if args.zs_threshold      is None else args.zs_threshold
+                ch.ZeroSuppress.Hysteresis =      248 if args.zs_hysteresis     is None else args.zs_hysteresis
+                ch.ZeroSuppress.ZeroValue =       0   if args.zs_zero_value     is None else args.zs_zero_value
+                ch.ZeroSuppress.PreGateSamples =  0   if args.pre_gate_samples  is None else args.pre_gate_samples
+                ch.ZeroSuppress.PostGateSamples = 0   if args.post_gate_samples is None else args.post_gate_samples
+                #if args.zero_value:
+                #    ch.ZeroSuppress.ZeroValue = args.zero_value
+
         # Manages channels
         for ch in vi.Channels:
-            if args.vertical_range:
+            if args.vertical_range!=None:
                 ch.Range = args.vertical_range
-            if args.vertical_offset:
+            if args.vertical_offset!=None:
                 ch.Offset = args.vertical_offset
-            #if args.filter_max_frequency:
-            #    ch.Filter.MaxFrequency = args.vertical_offset
+            if args.input_max_frequency:
+                ch.Filter.Bypass = False
+                ch.Filter.MaxFrequency = args.input_max_frequency
+            if args.bypass_anti_aliasing is not None:
+                ch.Filter.BypassAntiAliasing = args.bypass_anti_aliasing
+            #ch.BaselineCorrection.Mode = 1
+            if args.data_inversion:
+                ch.DataInversionEnabled = True
+        #vi.Channels["Channel1"].Filter.BypassAntiAliasing = True
+        #vi.Channels["Channel2"].Filter.BypassAntiAliasing = True
 
-        if args.calibration_signal:
-            vi.Private.Calibration.UserSignal = "Signal"+args.calibration_signal
+        if args.calibration_signal!=None:
+            vi.Private.PrivateCalibration.UserSignal = "Signal"+args.calibration_signal
+
+        if args.equalization:
+            vi.Calibration.Equalization = CalibrationEqualization.SharpRollOff if args.equalization=="Sharp" else \
+                                          CalibrationEqualization.SmoothRollOff if args.equalization=="Smooth" else \
+                                          CalibrationEqualization.Custom if args.equalization=="Custom" else 0
 
         # Manages ControlIO
-        for ctrlio, iosignal in zip( vi.ControlIOs, [args.control_io1, args.control_io2, args.control_io3] ):
-            if iosignal:
-                ctrlio.Signal = iosignal
+        if args.control_io1 or args.control_io2 or args.control_io3:
+            for ctrlio, iosignal in zip( [vi.ControlIOs[0], vi.ControlIOs[1], vi.ControlIOs[2]], [args.control_io1, args.control_io2, args.control_io3] ):
+                if iosignal:
+                    ctrlio.Signal = iosignal
+                    #ctrlio.OutSoftwareState = 0
 
         # Manages SelfTrigger
         if args.self_trigger_square_wave:
@@ -210,7 +288,7 @@ def ApplyArgs( vis, args ):
             st = vi.Trigger.Sources["SelfTrigger"]
             try: # Either we have the armed pulse mode and pulse duration attribute, or we revert to AgMD2-2.4 hack
                 st.SelfTrigger.Mode = SelfTriggerMode.ArmedPulse
-                if args.self_trigger_pulse_duration:
+                if args.self_trigger_pulse_duration!=None:
                     st.SelfTrigger.PulseDuration = args.self_trigger_pulse_duration
             except AttributeError as e:
                 print( "ERROR for Armed Pulse", e, file=stderr )
@@ -219,20 +297,64 @@ def ApplyArgs( vis, args ):
                 st.SelfTrigger.SquareWave.DutyCycle = args.self_trigger_wave_duty_cycle
                 st.SelfTrigger.Mode = 2 # SelfTriggerMode.ArmedPulse
 
+        if args.timestamp_reset and args.timestamp_reset != 'OnInitiate':
+            #vi.TimeReference.ResetMode =    TimeResetMode.OnTriggerEnable if args.timestamp_reset == "OnTriggerEnable" \
+            #                           else TimeResetMode.OnFirstTrigger  if args.timestamp_reset == "OnFirstTrigger"  \
+            #                           else TimeResetMode.Immediate
+            vi.TimeReference.ResetMode =    TimeResetMode.OnTriggerEnable if args.timestamp_reset == "OnTriggerEnable" \
+                                       else TimeResetMode.OnFirstTrigger  if args.timestamp_reset == "OnFirstTrigger"  \
+                                       else TimeResetMode.Immediate
+
 #        for ch in [0, 1, 2, 3, 4, 5, 23, 24, 25, 26, 30, 31]:
 #            vi.Channels[ch].Enabled = False 
 
         # Manages the calibration offset target
-        if args.cal_offset_target:
+        if args.cal_offset_target!=None:
             vi.Calibration.TargetVoltageEnabled = True
             for ch in vi.Channels:
                 ch.CalibrationTargetVoltage = args.cal_offset_target
 
+        if args.mode=='CFW':
+            vi.Acquisition.Mode = AcquisitionMode.UserFDK
+
+        if args.no_digital_gain:
+            vi.Private.PrivateCalibration.SetCalibrationValueBoolean( "DigitalGain:Disable", True )
+        if args.no_adc_lut:
+            vi.Private.PrivateCalibration.SetCalibrationValueBoolean( "AdcLut:Disable", True )
+        if args.no_ric_filter:
+            vi.Private.PrivateCalibration.SetCalibrationValueBoolean( "RicFilter:Disable", True )
+        #vi.Private.PrivateCalibration.SetCalibrationValueBoolean( "RicFilter:ForceIdentityNoEqualizationFilter", True )
+        #vi.Private.PrivateCalibration.SetCalibrationValueBoolean( "RicFilter:ForceDefaultNoEqualizationFilter", True )
+
+        #vi.Private.PrivateCalibration.SetCalibrationValueBoolean( "SampleAveraging:Disable", True )
+        #vi.Private.PrivateCalibration.SetCalibrationValueInt32( "SampleAveraging:ReadChannel", 1 )
+
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["OffsetPrecal"].DumpWaveforms = True
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["DC"].DumpWaveforms = True
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["AC"].DumpWaveforms = True
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["StreamAlign"].DumpWaveforms = True
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["T0"].DumpWaveforms = True
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["DC"].Enabled = False
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["StreamAlign"].Enabled = False
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["PhaseMismatch"].Enabled = False
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["GainOffsetMismatch"].Enabled = False
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["AC"].Enabled = False
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["T0"].Enabled = False
+
+        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["DC"].DumpWaveforms = True
+
         vi.Acquisition.ApplySetup()
-        print( "Firmware:", vi.Identity.InstrumentFirmwareRevision, file=stderr )
+
+        global lastFirmwareRevision
+        newFirmwareRevision = vi.Identity.InstrumentFirmwareRevision
+        if args.info_driver and newFirmwareRevision != lastFirmwareRevision:
+            print( "Firmware:", vi.Identity.InstrumentFirmwareRevision, file=stderr )
+            lastFirmwareRevision = newFirmwareRevision
 
 
-def Calibrate( vis, args, loop ):
+def Calibrate( vis, args, loop, force ):
+    if args.no_calibrate:
+        return
     if isinstance( vis, int ):
         vis = [vis]
     for vi in vis:
@@ -242,21 +364,31 @@ def Calibrate( vis, args, loop ):
         if loop==0 or args.calibrate_period and loop%args.calibrate_period==0:
             calibrate = True
 
-        if not calibrate:
+        if not calibrate and not force:
+            continue
+        if loop!=0 and args.calibrate_once:
             continue
 
         #print( "==> Calibration required.", file=stderr )
         if args.calibration_signal:
-            vi.Private.Calibration.UserSignal = ""
+            vi.Private.PrivateCalibration.UserSignal = ""
 
-        vi.Calibration.SelfCalibrate()
+        try:
+            vi.Calibration.SelfCalibrate()
+            pass
+        except RuntimeError as e:
+            print( e, file=stderr )
+            if args.calibrate_fails:
+                raise
 
         if args.calibration_signal:
-            vi.Private.Calibration.UserSignal = "Signal"+args.calibration_signal
+            vi.Private.PrivateCalibration.UserSignal = "Signal"+args.calibration_signal
 
 
 def Acquire( vis, args, queue, loop ):
     global _Continue
+    if args.acquire_none:
+        return False
     if isinstance( vis, int ):
         vis = [vis]
     if args.tsr:
@@ -265,10 +397,10 @@ def Acquire( vis, args, queue, loop ):
             try:
                 #print( "TSR Continue", file=stderr )
                 vi.Acquisition.TSR.Continue()
-                if vi.Acquisition.TSR.OverflowOccurred:
+                if vi.Acquisition.TSR.MemoryOverflowOccurred:
                     print( "ERROR: TSR MEMORY OVERFLOW", file=stderr )
                     _Continue = False
-                    vi.Acquisition.Abort()
+                    #vi.Acquisition.Abort()
                     #return False
             except:
                 #print( "\nPress ENTER", file=stderr )
@@ -285,7 +417,7 @@ def Acquire( vis, args, queue, loop ):
                 if complete:
                     return True
                 polls = polls + 1
-                sleep( 0.0001 )
+                sleep( 0.001 )
 
     elif args.streaming_continuous or args.streaming_triggered:
         for vi in vis:
@@ -295,8 +427,16 @@ def Acquire( vis, args, queue, loop ):
 
     else:
         for vi in vis:
+            if args.timestamp_reset == 'OnInitiate':
+                vi.TimeReference.Time = datetime.utcfromtimestamp( 0 )
             vi.Acquisition.Initiate()
+            #print( vi.ControlIOs[0].OutSoftwareState, vi.ControlIOs[1].OutSoftwareState, vi.ControlIOs[2].OutSoftwareState, file=stderr )
+            #print( vi.ControlIOs[0].InSoftwareState,  vi.ControlIOs[1].InSoftwareState,  vi.ControlIOs[2].InSoftwareState,  file=stderr )
+            #vi.ControlIOs[0].OutSoftwareState = 1
+            #print( vi.ControlIOs[0].OutSoftwareState, vi.ControlIOs[1].OutSoftwareState, vi.ControlIOs[2].OutSoftwareState, file=stderr )
+            #print( vi.ControlIOs[0].InSoftwareState,  vi.ControlIOs[1].InSoftwareState,  vi.ControlIOs[2].InSoftwareState,  file=stderr )
             if args.trigger_name=="SelfTrigger":
+                sleep( 0.200 )
                 vi.Trigger.Sources["SelfTrigger"].SelfTrigger.InitiateGeneration()
 
         while True:
@@ -305,12 +445,13 @@ def Acquire( vis, args, queue, loop ):
                 for vi in vis:
                     acqDone = False
                     fullwait = float( args.poll_timeout )
-                    while fullwait>=0 and _Continue and queue.empty() and not acqDone:
+                    while fullwait>=0.0 and _Continue and queue.empty() and not acqDone:
                         oncewait = min( 0.2, fullwait )
                         sleep( oncewait/1000.0 )
                         fullwait = fullwait-oncewait
                         isIdle = vi.Acquisition.Status.IsIdle
                         acqDone = isIdle==AcquisitionStatusResult.ResultTrue
+                        nn = vi.Acquisition.NumberOfAcquiredRecords
                     if acqDone:
                         return True
                     else:
@@ -331,6 +472,68 @@ def Acquire( vis, args, queue, loop ):
                             return False
 
 
+class StreamWaveform( object ):
+    def __init__( self, elmt, bits, dt, args ):
+        self.SampleType = "Int16"
+        self.TraceType = "Digitizer"
+        self.NbrAdcBits = 16
+        self.ActualRecords = 1
+        self.RecordSize = args.output_samples
+        self.XIncrement = 5e-10
+        self.InitialXOffset = 0.0
+        self.InitialXTimeSeconds = 0.0
+        self.InitialXTimeFraction = 0.0
+        self.ScaleOffset = 0.0
+        self.ScaleFactor = 1.0
+        self.dataTruncation = dt#args.data_truncation
+        if self.dataTruncation == 12:
+            self.Samples = empty(args.output_samples if args.output_samples else args.samples, dtype=int16)
+            for n in range( min( len(elmt)//3, len(self.Samples)//8 ) ):
+                e0 = elmt[3*n]
+                e1 = elmt[3*n+1]
+                e2 = elmt[3*n+2]
+                s0 = e0 & 0x00000fff
+                s1 = (e0 & 0x00fff000) >> 12
+                s2 = ((e1 & 0x0000000f) << 8) | ((e0 & 0xff000000) >> 24)
+                s3 = (e1 & 0x0000fff0) >> 4
+                s4 = (e1 & 0x0fff0000) >> 16
+                s5 = ((e2 & 0x000000ff) << 4) | ((e1 & 0xf0000000) >> 28)
+                s6 = (e2 & 0x000fff00) >> 8
+                s7 = (e2 & 0xfff00000) >> 20
+                for i, s in enumerate([s0, s1, s2, s3, s4, s5, s6, s7]):
+                    self.Samples[8*n+i] = s << 4 #(s if s <= 0x000007ff else s | 0xfffff000)
+        elif bits==8:
+            s = args.output_samples if args.output_samples else args.samples
+            self.Samples = elmt[:(s//4)+1].view(dtype=int8)[:s].astype(dtype=int16)*256
+        else:
+            self.Samples = elmt.view(dtype=int16)[:args.output_samples]
+    def __len__( self ):
+        return len(self.Samples)
+    def __getitem__( self, arg ):
+        return self.Samples[arg]
+    def __iter__( self ):
+        return self.Samples.__iter__()
+
+class StreamRecord( object ):
+    def __init__( self, args ):
+        self.SampleType = "Int16"
+        self.TraceType = "Digitizer"
+        self.NbrAdcBits = 16
+        self.ActualRecords = 1
+        self.RecordSize = args.output_samples
+        self.XIncrement = 5e-10
+        self.InitialXOffset = 0.0
+        self.InitialXTimeSeconds = 0.0
+        self.InitialXTimeFraction = 0.0
+        self.ScaleOffset = 0.0
+        self.ScaleFactor = 1.0
+        self.Waveforms = []
+    def __len__( self ):
+        return len(self.Waveforms)
+    def __getitem__( self, arg ):
+        return self.Waveforms[arg]
+    def __iter__(self):
+        return self.Waveforms.__iter__()
 
 def FetchChannels( vis, args ):
     global _Continue
@@ -340,24 +543,48 @@ def FetchChannels( vis, args ):
     nbrAdcBits = vis[0].InstrumentInfo.NbrADCBits
 
     if args.streaming_continuous or args.streaming_triggered:
-        sleep( 0.01 )
         for vi in vis:
-            tsCount = 32*1024
-            fetch = AgMD2_StreamFetchDataInt32( vi, "StreamTriggers", tsCount, tsCount )
-            if fetch[3] == tsCount:
-                print( "Fetch: ", fetch[1], fetch[2], fetch[3], fetch[4], file=stderr )
-                with open( "ts.txt", "at" ) as f:
-                  for ts in fetch[0][fetch[4]:fetch[4]+fetch[3]].view( 'uint64' ):
-                      print( ts//256, file=f )
-            else:
-                print( "Available: ", fetch[1], fetch[2], fetch[3], fetch[4], file=stderr )
-            chCount = 8*1024*1024
-            fetchCh1 = AgMD2_StreamFetchDataInt32( vi, "StreamCh1", chCount, chCount )
-            if fetchCh1[3] == chCount:
-                print( "FetchCh1: ", fetchCh1[1], fetchCh1[2], fetchCh1[3], fetchCh1[4], file=stderr )
-            fetchCh2 = AgMD2_StreamFetchDataInt32( vi, "StreamCh2", chCount, chCount )
-            if fetchCh2[3] == chCount:
-                print( "FetchCh2: ", fetchCh2[1], fetchCh2[2], fetchCh2[3], fetchCh2[4], file=stderr )
+            #tsCount = 32*1024
+            #data = vi.Streams["StreamTriggers"].FetchDataInt32( tsCount )
+            #if data.ActualElements > 0:
+            #    print( "FetchTriggers: ", data.ActualElements, data.AvailableElements, data.Elements.view( 'uint64' ), file=stderr )
+            #    #with open( "ts.txt", "at" ) as f:
+            #    #  for ts in fetch[0][fetch[4]:fetch[4]+fetch[3]].view( 'uint64' ):
+            #    #      print( ts//256, file=f )
+            #else:
+            #    print( "Available Triggers: ", data.AvailableElements, file=stderr )
+            numberOfWaveforms = args.read_records
+            elmts = [None] * len(args.read_channels)
+            for i, ch in enumerate(args.read_channels):
+                elementsPerWaveform = args.read_samples//2
+                if i==0 and args.data_truncation:
+                    elementsPerWaveform = elementsPerWaveform * args.data_truncation // 16
+                readElmts = numberOfWaveforms*elementsPerWaveform
+                streamName = "StreamCh%d"%(ch)
+                stream = vi.Streams[streamName]
+                elmt = stream.FetchDataInt32( readElmts )
+                if elmt.ActualElements > 0:
+                    if args.output_info: print( streamName, ":", elmt.AvailableElements, elmt.ActualElements, len(elmt.Elements), file=stderr )
+                    elmts[i] = elmt
+                else:
+                    if args.output_info: print( streamName, ":", elmt.AvailableElements, file=stderr )
+                    sleep( 0.2 )
+                    if elmt.AvailableElements < 0:
+                        _Continue = False
+            if all(elmts):
+                first_record  = args.output_1st_record if args.output_1st_record else 0
+                count_records = args.output_records if args.output_records else args.read_records
+                for w in range( first_record, min(numberOfWaveforms, first_record + count_records) ):
+                    rec = StreamRecord( args )
+                    for i, elmt in enumerate( elmts ):
+                        elementsPerWaveform = args.read_samples//2
+                        if i==0 and args.data_truncation:
+                            elementsPerWaveform = elementsPerWaveform * args.data_truncation // 16
+                        rec.Waveforms.append( StreamWaveform(elmt.Elements[w*elementsPerWaveform:(w+1)*elementsPerWaveform], nbrAdcBits, 12 if args.data_truncation and i==0 else None, args) )
+                    OutputTrace( rec, stdout, NbrSamples=args.output_samples )
+                    #elmt = vi.Streams["StreamCh2"].FetchDataInt32( readElmts )
+                    #if elmt.ActualElements > 0:
+                    #    print( "FetchCh2: ", elmt.ActualElements, elmt.AvailableElements, elmt.Elements, file=stderr )
         return
     
     if args.mode=='DDC':
@@ -393,14 +620,15 @@ def FetchChannels( vis, args ):
                 channel = vi.Channels["Channel%d"%ch]
                 try:
                     wfms = channel.Measurement.FetchAccumulatedWaveform( 0, args.read_records, 0, args.read_samples, dtype=readType)
+                    if args.output_info: print( channel.Name, "InitialXOffset:", wfms[0].InitialXOffset*1e12, "sample", *wfms[0].Samples[0:16], file=stderr )
                 except RuntimeError:
                     vi.Acquisition.ErrorOnOverrangeEnabled = False
                     wfms = channel.Measurement.FetchAccumulatedWaveform( 0, args.read_records, 0, args.read_samples, dtype=readType)
                     vi.Acquisition.ErrorOnOverrangeEnabled = True
-                #mrec.append( fetch )
+                mrec.append( wfms )
 
             try:
-                OutputTraces( wfms, stdout, FirstRecord=args.output_1st_record, NbrRecords=args.output_records, NbrSamples=args.output_samples )
+                OutputTraces( mrec, stdout, FirstRecord=args.output_1st_record, NbrRecords=args.output_records, NbrSamples=args.output_samples )
                 stdout.write( "\n" )
                 stdout.flush()
                 #print( "$InitialXTimeSeconds", fetch[6][0], file=stdout )
@@ -410,39 +638,27 @@ def FetchChannels( vis, args ):
                 break
 
     else:
-        if not args.read_type:
-            args.read_type = 'int8' if nbrAdcBits<=8 else 'int16'
-        if args.records<=0:
-            if args.read_type=='int16':
-                DataWidth = 16
-                Fetch = AgMD2_FetchWaveformInt16
-            elif args.read_type=='real64':
-                DataWidth = 64
-                Fetch = AgMD2_FetchWaveformReal64
-            else:
-                DataWidth = 8
-                Fetch = AgMD2_FetchWaveformInt8
-            nbrSamplesToRead = AgMD2_QueryMinWaveformMemory( vis[0], DataWidth, 1, 0, args.read_samples )
-
+        if args.records==0:
             rec = Record( checkXOffset=not args.no_check_x_offset, nbrAdcBits=nbrAdcBits )
             try:
                 for vi in vis:
                     for ch in args.read_channels:
-                        rec.append( Fetch( vi, "Channel%d"%( ch ), nbrSamplesToRead ) )
+                        channel = vi.Channels["Channel%d"%ch]
+                        wfm = channel.Measurement.FetchWaveform( dtype=args.read_type )
             except RuntimeError:
-                for vi in vis:
-                    try:
-                        AgMD2_SetAttributeViBoolean( vi, "", AGMD2_ATTR_ERROR_ON_OVERRANGE_ENABLED, False )
-                    except:
-                        continue
-                for vi in vis:
-                    for ch in args.read_channels:
-                        rec.append( Fetch( vi, "Channel%d"%( ch ), nbrSamplesToRead ) )
-                for vi in vis:
-                    AgMD2_SetAttributeViBoolean( vi, "", AGMD2_ATTR_ERROR_ON_OVERRANGE_ENABLED, True )
-
+                pass
+                #for vi in vis:
+                #    vi.Acquisition.ErrorOnOverrangeEnabled = False
+                #    try:
+                #        for ch in args.read_channels:
+                #            channel = vi.Channels["Channel%d"%ch]
+                #            wfm = channel.Measurement.FetchWaveform( dtype=args.read_type )
+                #    except:
+                #        continue
+                #    vi.Acquisition.ErrorOnOverrangeEnabled = True
             try:
-                OutputTrace( rec, stdout )
+                if args.output_info: print( "InitialXOffset:", wfm.InitialXOffset, file=stderr )
+                OutputTraces( [wfm], stdout, FirstRecord=args.output_1st_record, NbrRecords=args.output_records, NbrSamples=args.output_samples )
             except BrokenPipeError:
                 _Continue = False
 
@@ -451,18 +667,27 @@ def FetchChannels( vis, args ):
             for vi in vis:
                 for ch in args.read_channels:
                     channel = vi.Channels["Channel%d"%ch]
-                    fetch = channel.MultiRecordMeasurement.FetchMultiRecordWaveform( 0, args.read_records, 0, args.read_samples, dtype=args.read_type)
-                    #mrec.append( Fetch( vi, "Channel%d"%( ch ), 0, args.read_records, 0, args.read_samples, nbrSamplesToRead, args.read_records ) )
-                    print( "==>", "Fetch:", fetch, file=stderr )
-                    print( "==>", "Fetch:", fetch[0], file=stderr )
-                    for rec in fetch:
-                        print( "==>", "Fetch:", "Record:", rec, file=stderr )
-                        print( "==>", "Fetch:", "Record:", rec.Samples, file=stderr )
+                    try:
+                        wfms = channel.MultiRecordMeasurement.FetchMultiRecordWaveform( 0, args.read_records, 0, args.read_samples, dtype=args.read_type)
+                    except RuntimeError:
+                        canReadAgain = True
+                        try: vi.Acquisition.ErrorOnOverrangeEnabled = False
+                        except RuntimeError: canReadAgain = False
 
+                        if not canReadAgain:
+                            raise
 
+                        wfms = channel.MultiRecordMeasurement.FetchMultiRecordWaveform( 0, args.read_records, 0, args.read_samples, dtype=args.read_type)
+                        vi.Acquisition.ErrorOnOverrangeEnabled = True
+                    mrec.append( wfms )
+                    prevts = 0.0
+                    for rec in wfms:
+                        ts = rec.InitialXTimeSeconds+rec.InitialXTimeFraction
+                        #print( ts if prevts==0.0 else 1e6*(ts-prevts), file=stderr )
+                        prevts = ts
             try:
-                OutputTraces( mrec, fetch )
-                print( "==>", "Output", file=stderr )
+                if args.output_info: print( "InitialXOffset:", mrec[0].InitialXOffset*1e12, file=stderr )
+                OutputTraces( mrec, stdout, FirstRecord=args.output_1st_record, NbrRecords=args.output_records, NbrSamples=args.output_samples )
             except BrokenPipeError:
                 _Continue = False
 
@@ -511,7 +736,7 @@ def Run( args, queue ):
 
     args = DigitizerArgs()
 
-    vis = Initialize( args, "" )
+    vis = Initialize( args, InitOptions() )
     #ShowInfo( vis )
     ApplyArgs( vis, args )
 
@@ -519,12 +744,22 @@ def Run( args, queue ):
     oldSigInt  = signal( SIGINT,  _SignalEndLoop )
 
     loop = 0
+    _Continue = False if args.loops == 0 else True
     while _Continue:
+
+        forceCal = False
+
+        if args.reset_period and loop>0:
+            if loop % args.reset_period == 0:
+                Reset( vis )
+                ApplyArgs( vis, args )
+                #forceCal = True
 
         if UpdateArgs( args, queue ):
             ApplyArgs( vis, args )
+            forceCal = args.calibrate_always
             
-        Calibrate( vis, args, loop )
+        Calibrate( vis, args, loop, forceCal )
 
         if Acquire( vis, args, queue, loop ):
             FetchChannels( vis, args )

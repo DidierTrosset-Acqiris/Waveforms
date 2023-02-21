@@ -17,7 +17,7 @@ def main():
     parser.add_argument( "--scale",   "-s",  type=int,   default=65536 )
     parser.add_argument( "--length",  "-l",  type=float, default=1e-9  )
     parser.add_argument( "--offset",  "-o",  type=float, default=0.0   )
-    parser.add_argument( "--zero-delay", "-zd", action='store_true' )
+    parser.add_argument( "--zero-delay", "-zd", action='store_true', help="Warning: Use only with trigger delay multiple of sampling interval." )
     parser.add_argument( "files", nargs='*', type=str )
 
     args = parser.parse_args()

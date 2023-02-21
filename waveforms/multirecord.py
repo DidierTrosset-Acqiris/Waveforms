@@ -130,7 +130,7 @@ class _SubRecord:
         return len( self.mrec.mwfms )
 
     def __getitem__( self, index ):
-        return _SubWaveform( self.mrec.mwfms[index], self.index )
+        return self.mrec.mwfms[index][self.index] if self.mrec.mwfms[index].__class__.__name__=="AqMD3WaveformCollection" else _SubWaveform( self.mrec.mwfms[index], self.index )
 
     @property
     def NbrAdcBits( self ):
@@ -138,23 +138,26 @@ class _SubRecord:
 
     @property
     def ActualPoints( self ):
-        return self.mrec.mwfms[0].ActualPoints[self.index]
+        try:
+            return self.mrec.mwfms[0][self.index].ActualPoints
+        except:
+            return self.mrec.mwfms[0][self.index].ActualSamples
 
     @property
     def InitialXOffset( self ):
-        return self.mrec.mwfms[0].InitialXOffset[self.index]
+        return self.mrec.mwfms[0][self.index].InitialXOffset
 
     @property
     def InitialXTimeSeconds( self ):
-        return self.mrec.mwfms[0].InitialXTimeSeconds[self.index]
+        return self.mrec.mwfms[0][self.index].InitialXTimeSeconds
 
     @property
     def InitialXTimeFraction( self ):
-        return self.mrec.mwfms[0].InitialXTimeFraction[self.index]
+        return self.mrec.mwfms[0][self.index].InitialXTimeFraction
 
     @property
     def XIncrement( self ):
-        return self.mrec.mwfms[0].XIncrement
+        return self.mrec.mwfms[0][self.index].XIncrement
 
     @property
     def FullScale( self ):
@@ -232,22 +235,22 @@ class MultiRecord():
         return self.mwfms[0].ActualRecords
 
     def append( self, fetch ):
-        mwfm = _MultiWaveform( fetch )
+        mwfm = fetch if fetch.__class__.__name__=="AqMD3WaveformCollection" else _MultiWaveform( fetch )
         if len( self.mwfms )>0 and self.mwfms[0].ActualRecords != mwfm.ActualRecords:
             raise RuntimeError( "ActualRecords do not match." )
         if len( self.mwfms )>0:
-            for r in range( mwfm.ActualRecords ):
-                if self.mwfms[0].ActualPoints[r] != mwfm.ActualPoints[r]:
+            for r, wfm in enumerate( mwfm ):
+                if len( self.mwfms[0][r].Samples ) != len( wfm.Samples ):
                     raise RuntimeError( "ActualPoints do not match." )
             if self.checkXOffset:
                 for r in range( mwfm.ActualRecords ):
-                    if self.mwfms[0].InitialXOffset[r] != mwfm.InitialXOffset[r]:
-                        raise RuntimeError( "InitialXOffset do not match. %g <> %g"%( self.mwfms[0].InitialXOffset[r], mwfm.InitialXOffset[r] ) )
-                    if self.mwfms[0].InitialXTimeSeconds[r] != mwfm.InitialXTimeSeconds[r]:
-                        raise RuntimeError( "InitialXTimeSeconds do not match. %g <> %g"%( self.mwfms[0].InitialXTimeSeconds[r], mwfm.InitialXTimeSeconds[r] ) )
-                    if self.mwfms[0].InitialXTimeFraction[r] != mwfm.InitialXTimeFraction[r]:
-                        raise RuntimeError( "InitialXTimeFraction do not match. %g <> %g"%( self.mwfms[0].InitialXTimeFraction[r], mwfm.InitialXTimeFraction[r] ) )
-            if self.mwfms[0].XIncrement != mwfm.XIncrement:
+                    if self.mwfms[0][r].InitialXOffset != mwfm[r].InitialXOffset:
+                        raise RuntimeError( "InitialXOffset do not match. %g <> %g"%( self.mwfms[0][r].InitialXOffset, mwfm[r].InitialXOffset ) )
+                    if self.mwfms[0][r].InitialXTimeSeconds != mwfm[r].InitialXTimeSeconds:
+                        raise RuntimeError( "InitialXTimeSeconds do not match. %g <> %g"%( self.mwfms[0][r].InitialXTimeSeconds, mwfm[r].InitialXTimeSeconds ) )
+                    if self.mwfms[0][r].InitialXTimeFraction != mwfm[r].InitialXTimeFraction:
+                        raise RuntimeError( "InitialXTimeFraction do not match. %g <> %g"%( self.mwfms[0][r].InitialXTimeFraction, mwfm[r].InitialXTimeFraction ) )
+            if self.mwfms[0][0].XIncrement != mwfm[0].XIncrement:
                 raise RuntimeError( "XIncrement do not match." )
         self.mwfms.append( mwfm )
 
@@ -257,7 +260,10 @@ class MultiRecord():
 
     @property
     def FullScale( self ):
-        return FullScale( self.SampleType )
+        try: 
+            return FullScale( self.SampleType )
+        except:
+            return 2**16
 
 
 

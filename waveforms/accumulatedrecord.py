@@ -124,9 +124,9 @@ class _AccSubWaveform:
 
     @property
     def Samples( self ):
-        first = self.mwfm.FirstValidPoint[self.index]
-        actual = self.mwfm.ActualPoints[self.index]
-        return self.mwfm.SampleArray[first:first+actual]
+        first = self.mwfm[self.index].FirstValidSample
+        actual = self.mwfm[self.index].ActualSamples
+        return self.mwfm[self.index].Samples
 
 
 class _AccSubRecord:
@@ -157,7 +157,7 @@ class _AccSubRecord:
 
     @property
     def InitialXOffset( self ):
-        return self.mrec.mwfms[0].InitialXOffset
+        return self.mrec.mwfms[0][0].InitialXOffset#[self.index]
 
     @property
     def InitialXTimeSeconds( self ):
@@ -169,7 +169,7 @@ class _AccSubRecord:
 
     @property
     def XIncrement( self ):
-        return self.mrec.mwfms[0].XIncrement
+        return self.mrec.mwfms[0][0].XIncrement
 
     @property
     def FullScale( self ):
@@ -257,7 +257,7 @@ class AccMultiRecord():
         return self.mwfms[0].ActualAverages
 
     def append( self, fetch ):
-        mwfm = _AccMultiWaveform( fetch )
+        mwfm = fetch if fetch.__class__.__name__=="AqMD3AccumulatedWaveformCollection" else _AccMultiWaveform( fetch )
         if len( self.mwfms )>0 and self.mwfms[0].ActualRecords != mwfm.ActualRecords:
             raise RuntimeError( "ActualRecords do not match." )
         if len( self.mwfms )>0:
