@@ -202,7 +202,7 @@ class TraceHandler:
     def trcSamples(self, strLine):
         values = strLine.split()
         if not self._Waves:
-            self._initWaves( self.sampleType, len( values ) )
+            self._initWaves( getattr( self, "sampleType", "Int8" ), len( values ) )
         if self._index>=self._size:
             self._resizeWaves()
         try:
@@ -556,7 +556,8 @@ def OutputTrace( trace, file, Model=None, NbrSamples=None, FirstSample=None ):
     try: print( "$ActualAverages", trace.ActualAverages, file=file )
     except: pass
     for a in dir(trace):
-        if isinstance(a, (collections.Sequence, ndarray)): continue
+        if hasattr(collections, 'Sequence') and isinstance(a, collection.Sequence): continue
+        if isinstance(a, ndarray): continue
         if a.startswith( '__' ): continue
         if a.startswith( '_' ): continue
         if a.startswith( 'Wave' ): continue
@@ -571,7 +572,7 @@ def OutputTrace( trace, file, Model=None, NbrSamples=None, FirstSample=None ):
         if a.startswith( 'InitialXOffset' ): continue
         if a.startswith( 'InitialXTimeSeconds' ): continue
         if a.startswith( 'InitialXTimeFraction' ): continue
-        print( "$%s"%a, getattr( trace, a ), file=file );
+        #print( "$%s"%a, getattr( trace, a ), file=file );
 
     try:
         for index, sample in enumerate( trace.Samples[FirstSample:] ):

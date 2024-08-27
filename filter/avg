@@ -3,30 +3,52 @@
 import sys
 from math import sqrt
 
-count = 0
-minimum = float('inf')
-maximum = -float('inf')
-accumulate = 0.0
-sqaccumulate = 0.0
+columns = -1
+
+
+class averager:
+    def __init__(self):
+        self.count = 0
+        self.minimum = float('inf')
+        self.maximum = -float('inf')
+        self.accumulate = 0.0
+        self.sqaccumulate = 0.0
+
+    def add(self, value):
+        self.count = self.count + 1
+        if value < self.minimum: self.minimum = value
+        if value > self.maximum: self.maximum = value
+        self.accumulate = self.accumulate + value
+        self.sqaccumulate = self.sqaccumulate + value*value
+
+    def get(self):
+        mean = self.accumulate/self.count
+        deviation = max(0.0, self.sqaccumulate/self.count - mean*mean)
+        return self.count, self.minimum, self.maximum, mean, sqrt(deviation)
+
+    def __str__(self):
+        return "%d %f %f %f %f"%(self.get())
+
 
 for i, line in enumerate( sys.stdin ):
-    if i %10 == 0:
-        count = 0
-        minimum = float('inf')
-        maximum = -float('inf')
-        accumulate = 0.0
-        sqaccumulate = 0.0
 
-    value = float( line )
-    count = count + 1
-    if value < minimum: minimum = value
-    if value > maximum: maximum = value
-    accumulate = accumulate + value
-    sqaccumulate = sqaccumulate + value*value
-    mean = accumulate/count
-    deviation = max(0.0, sqaccumulate/count - mean*mean)
+    if line[0] == "#":
+        continue
+
     try:
-        print( value, minimum, maximum, accumulate/count, "%f"%(sqrt(deviation)), flush=True )
-    except BrokenPipeError:
+        values = list(map(float, line.split() ))
+        if columns == -1:
+            columns = len(values)
+            averagers = [averager() for i in range(columns)]
+        elif columns != len(values):
+            print( "Error: columns mismatch", file=sys.stderr )
+            sys.exit(1)
+    except ValueError:
         break
+
+    for i, value in enumerate(values):
+        averagers[i].add(value)
+    
+for v in zip(["count", "min", "max", "mean", "stdev"], *[avg.get() for avg in averagers]):
+    print( " ".join(map(str, v)) )
 

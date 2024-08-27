@@ -628,6 +628,7 @@ def ReadInput( queue ):
 def Update():
     global queue
     global Pause, Force
+    global tkHeader
     if Pause and not Force:
         return
     if queue.empty() and not Pause:
@@ -638,6 +639,7 @@ def Update():
         trace = queue.get()#_nowait()
         CalculateTrace(trace)
         ShowImages(trace)
+        tkHeader.update_idletasks()
     if not Pause:
         tkMain.after(0, Update)
 

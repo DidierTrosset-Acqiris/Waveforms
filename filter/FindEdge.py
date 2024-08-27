@@ -23,7 +23,7 @@ def FindPrevNext( samples, level ):
 def AverageEdges( records, level=None ):
     result = []
     if not level:
-        if records[0].TraceType=="Accumulated":
+        if hasattr( records[0], "ActualAverages" ):
             level = records[0].NbrAdcBits * records[0].ActualAverages / 2.0
         else:
             level = 0.0

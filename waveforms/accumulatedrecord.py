@@ -149,7 +149,11 @@ class _AccSubRecord:
 
     @property
     def ActualPoints( self ):
-        return self.mrec.mwfms[0].ActualPoints[self.index]
+        return self.mrec.mwfms[0][self.index].ActualSamples
+
+    @property
+    def ActualSamples( self ):
+        return self.mrec.mwfms[0][self.index].ActualSamples
 
     @property
     def ActualAverages( self ):
@@ -175,7 +179,7 @@ class _AccSubRecord:
     def FullScale( self ):
         try: nbrAdcBits = self.mrec.NbrAdcBits+1 if self.mrec.NbrAdcBits==12 else self.mrec.NbrAdcBits
         except: nbrAdcBits = 8
-        return 2**nbrAdcBits * self.ActualAverages if self.mrec.mwfms[0].SampleArray.dtype==int32 else 1
+        return 2**nbrAdcBits * self.ActualAverages if self.mrec.mwfms[0][self.index].Samples.dtype==int32 else 1
 
 
 class AccMultiRecord():
