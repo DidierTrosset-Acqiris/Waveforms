@@ -322,7 +322,6 @@ def ReadDDCRecords( f ):
 
     >>> from io import StringIO
     >>> trace = '''$SampleType Int16
-    ... $ActualChannels 2
     ... $Model U5303A
     ... $XIncrement 6.25e-10
     ... $InitialXOffset -7.93457e-11

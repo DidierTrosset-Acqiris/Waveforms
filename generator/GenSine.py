@@ -42,7 +42,6 @@ def main():
     trace.SampleType = "Int16"
     trace.NbrAdcBits = 10
     trace.FullScale = 65536
-    trace.ActualChannels = 1
     trace.Model = "GENERATOR"
     trace.XIncrement = 1.0 / args.sampling
     trace.InitialXOffset = 0.0

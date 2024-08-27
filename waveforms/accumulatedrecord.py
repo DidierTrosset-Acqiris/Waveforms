@@ -289,7 +289,6 @@ def _test_ReadAccRecords( f ):
     
     >>> from io import StringIO
     >>> trace = '''$SampleType Int32
-    ... $ActualChannels 2
     ... $ActualAverages 256
     ... $Model U5309A
     ... $XIncrement 1.0e-9

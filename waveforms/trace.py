@@ -122,7 +122,6 @@ class TraceHandler:
         for i in range( len( self._Waves ) ):
             self._Waves[i].resize( self._index )
             self.trace._Waves[i]._Samples = self._Waves[i]
-        self.trace.ActualChannels = len( self.trace._Waves )
         self.trace.ActualPoints = len( self.trace._Waves[0]._Samples )
         self.is_valid = True
 
@@ -141,8 +140,6 @@ class TraceHandler:
             self.trace.counter = int( strValue )
         elif strKey=='#ADCS':
             pass
-        elif strKey=='#CHANNELS' or strKey=='ActualChannels':
-            self.trace.ActualChannels = int(strValue)
         elif strKey=='FullScale':
             self.trace.FullScale = float(strValue) if float(strValue)!=int(strValue) else int(strValue)
         elif strKey=='NbrAdcBits':
@@ -268,8 +265,7 @@ def _test_ReadTrace( f ):
     define the text of the file content, but read it from an actual file!
 
     >>> from io import StringIO
-    >>> trace = '''$ActualChannels 2
-    ... $SampleType Int16
+    >>> trace = '''$SampleType Int16
     ... $FullScale 65536
     ... $Model M9703B
     ... $XIncrement 6.25e-10
@@ -316,7 +312,7 @@ def _test_ReadTrace( f ):
     >>> f = StringIO( trace )
     >>> for trc in ReadTrace( f ):
     ...    print( len( trc._Waves ) )
-    ...    print( trc.ActualChannels, trc.ActualPoints, trc.InitialXOffset, trc.InitialXTimeSeconds, trc.InitialXTimeFraction, trc.XIncrement )
+    ...    print( trc.ActualPoints, trc.InitialXOffset, trc.InitialXTimeSeconds, trc.InitialXTimeFraction, trc.XIncrement )
     ...    for wfm in trc:
     ...        print( wfm.ScaleFactor, wfm.ScaleOffset )
     ...        print( wfm._Samples )
@@ -332,8 +328,7 @@ def _test_ReadTrace( f ):
       -5742 -10242 -13118 -14034 -12734  -9378  -4670    846   6162  10542
       13250  13918  12482   8926   4258  -1202  -6542 -10818 -13406 -13938
      -12366  -8770]
-    >>> trace = '''$ActualChannels 2
-    ... $SampleType Int16
+    >>> trace = '''$SampleType Int16
     ... $FullScale 65536
     ... $XIncrement 6.25e-10
     ... $InitialXOffset -7.93456e-11
@@ -346,7 +341,6 @@ def _test_ReadTrace( f ):
     ... 10973 12850  
     ... 6947  9598   
     ...
-    ... $ActualChannels 2
     ... $SampleType Int16
     ... $FullScale 65536
     ... $XIncrement 6.25e-10
@@ -360,7 +354,6 @@ def _test_ReadTrace( f ):
     ... -10755 -12734
     ... -6573 -9378  
     ...
-    ... $ActualChannels 2
     ... $SampleType Int16
     ... $FullScale 65536
     ... $XIncrement 6.25e-10
@@ -374,7 +367,6 @@ def _test_ReadTrace( f ):
     ... 10429 12482  
     ... 6195  8926   
     ...
-    ... $ActualChannels 2
     ... $SampleType Int16
     ... $FullScale 65536
     ... $XIncrement 6.25e-10
@@ -391,7 +383,7 @@ def _test_ReadTrace( f ):
     >>> f = StringIO( trace )
     >>> for trc in ReadTrace( f ):
     ...    print( len( trc._Waves ) )
-    ...    print( trc.ActualChannels, trc.ActualPoints, trc.InitialXOffset, trc.XIncrement )
+    ...    print( trc.ActualPoints, trc.InitialXOffset, trc.XIncrement )
     ...    for wfm in trc:
     ...        print( wfm._Samples )
     2
@@ -440,7 +432,6 @@ def _test_OutputTrace( records, file ):
     >>> print( o.getvalue() )
     $SampleType Int16
     $FullScale 65536
-    $ActualChannels 2
     $Model U5303A
     $XIncrement 6.25e-10
     $InitialXOffset -7e-11
@@ -493,7 +484,6 @@ def _test_OutputTrace( records, file ):
     $InitialXOffset -7e-11
     $InitialXTimeSeconds 0.0
     $InitialXTimeFraction 0.002
-    $ActualChannels 2
     $$ScaleFactor 0 6.103515625e-05
     $$ScaleOffset 0 0.0
     $$ScaleFactor 1 3.0517578125e-05
@@ -539,7 +529,6 @@ def OutputTrace( trace, file, Model=None, NbrSamples=None, FirstSample=None ):
 
     try: nbrChannels = len( trace )
     except: nbrChannels = 1
-    print( "$ActualChannels", nbrChannels, file=file );
 #    for index, wave in enumerate( trace ):
 #        if hasattr( wave, 'ScaleFactor' ): print( "$$ScaleFactor", index, wave.ScaleFactor, file=file )
 #        if hasattr( wave, 'ScaleOffset' ): print( "$$ScaleOffset", index, wave.ScaleOffset, file=file )
