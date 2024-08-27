@@ -77,17 +77,6 @@ def DataType( sampleType ):
     else:
         raise RuntimeError( "ERROR: Unknown sample type "+str( SampleType )+"." )
 
-def FullScale( sampleType ):
-    if sampleType=="Int32":
-        return 2**32
-    elif sampleType=="Int16":
-        return 2**16
-    elif sampleType=="Int8":
-        return 2**8
-    elif sampleType=="Real64":
-        return 1.0
-    else:
-        raise RuntimeError( "ERROR: Unknown sample type "+str( SampleType )+"." )
 
 class TraceHandler:
 
@@ -112,7 +101,6 @@ class TraceHandler:
         self._chans = 0
         self.stype = int
         self.dtype = int16
-        self.FullScale = 65536
 
     def trcEnd(self, cont):
         if self._size==0 or not self._Waves or self._index==0:
@@ -129,9 +117,6 @@ class TraceHandler:
         if strKey=='SampleType':
             self.sampleType = strValue
             self.trace.SampleType = strValue
-        elif strKey=='FULLSCALE':
-            self.sampleType = "Int8" if strValue=="256" else "Int16" if strValue=="65536" else "Int32"
-            self.trace.SampleType = self.sampleType
         elif strKey=='Model':
             self.trace.Model = strValue
         elif strKey=='SINEFREQ' or strKey=='SineFreq':
@@ -140,8 +125,6 @@ class TraceHandler:
             self.trace.counter = int( strValue )
         elif strKey=='#ADCS':
             pass
-        elif strKey=='FullScale':
-            self.trace.FullScale = float(strValue) if float(strValue)!=int(strValue) else int(strValue)
         elif strKey=='NbrAdcBits':
             self.trace.NbrAdcBits = int(strValue)
         elif strKey=='SAMPIVAL' or strKey=='XIncrement':
@@ -266,7 +249,6 @@ def _test_ReadTrace( f ):
 
     >>> from io import StringIO
     >>> trace = '''$SampleType Int16
-    ... $FullScale 65536
     ... $Model M9703B
     ... $XIncrement 6.25e-10
     ... $InitialXOffset -7.93457e-11
@@ -329,7 +311,6 @@ def _test_ReadTrace( f ):
       13250  13918  12482   8926   4258  -1202  -6542 -10818 -13406 -13938
      -12366  -8770]
     >>> trace = '''$SampleType Int16
-    ... $FullScale 65536
     ... $XIncrement 6.25e-10
     ... $InitialXOffset -7.93456e-11
     ... -2243 -5486  
@@ -342,7 +323,6 @@ def _test_ReadTrace( f ):
     ... 6947  9598   
     ...
     ... $SampleType Int16
-    ... $FullScale 65536
     ... $XIncrement 6.25e-10
     ... $InitialXOffset -7.93457e-11
     ... 1869  5074   
@@ -355,7 +335,6 @@ def _test_ReadTrace( f ):
     ... -6573 -9378  
     ...
     ... $SampleType Int16
-    ... $FullScale 65536
     ... $XIncrement 6.25e-10
     ... $InitialXOffset -7.93458e-11
     ... -1427 -4670  
@@ -368,7 +347,6 @@ def _test_ReadTrace( f ):
     ... 6195  8926   
     ...
     ... $SampleType Int16
-    ... $FullScale 65536
     ... $XIncrement 6.25e-10
     ... $InitialXOffset -7.93459e-11
     ... 1053  4258   
@@ -431,7 +409,6 @@ def _test_OutputTrace( records, file ):
     >>> OutputTrace( r, file=o, Model="U5303A" )
     >>> print( o.getvalue() )
     $SampleType Int16
-    $FullScale 65536
     $Model U5303A
     $XIncrement 6.25e-10
     $InitialXOffset -7e-11
@@ -478,7 +455,6 @@ def _test_OutputTrace( records, file ):
     >>> OutputTrace( r, file=o, Model="U5303A", NbrSamples=8 )
     >>> print( o.getvalue() )
     $SampleType Int16
-    $FullScale 65536
     $Model U5303A
     $XIncrement 6.25e-10
     $InitialXOffset -7e-11
@@ -520,7 +496,6 @@ def OutputTrace( trace, file, Model=None, NbrSamples=None, FirstSample=None ):
     except: sampleType = getattr( trace, 'SampleType', SampleType( trace.Samples.dtype ) )
     print( "$SampleType", sampleType, file=file )
     if hasattr( trace, 'NbrAdcBits' ) and trace.NbrAdcBits: print( "$NbrAdcBits", 13 if trace.NbrAdcBits==12 and hasattr( trace, "ActualAverages") else trace.NbrAdcBits, file=file )
-    if hasattr( trace, 'FullScale' ) and trace.FullScale: print( "$FullScale", trace.FullScale, file=file )
     if Model: print( "$Model", Model, file=file )
     print( "$XIncrement", trace.XIncrement, file=file )
     print( "$InitialXOffset", trace.InitialXOffset, file=file )

@@ -2,7 +2,7 @@
 
 from numpy import float64, int8, int16, int32, array
 from sys import stderr
-from waveforms.trace import ReadTrace, FullScale
+from waveforms.trace import ReadTrace
 
 
 class _MultiWaveform():
@@ -109,8 +109,8 @@ class _SubWaveform:
         return iter( self.Samples )
 
     @property
-    def FullScale( self ):
-        return FullScale( SampleType( self.mwfm.fetch[0].dtype ) )
+    def SampleType( self ):
+        return SampleType( self.mwfm.fetch[0].dtype )
 
     @property
     def Samples( self ):
@@ -160,8 +160,8 @@ class _SubRecord:
         return self.mrec.mwfms[0][self.index].XIncrement
 
     @property
-    def FullScale( self ):
-        return self.mrec.FullScale
+    def SampleType( self ):
+        return self.mrec.SampleType
 
 
 class MultiRecord():
@@ -252,13 +252,6 @@ class MultiRecord():
     @property
     def XIncrement( self ):
         return self.mwfms[0].XIncrement
-
-    @property
-    def FullScale( self ):
-        try: 
-            return FullScale( self.SampleType )
-        except:
-            return 2**16
 
 
 

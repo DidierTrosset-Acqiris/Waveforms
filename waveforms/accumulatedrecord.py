@@ -175,10 +175,8 @@ class _AccSubRecord:
         return self.mrec.mwfms[0][0].XIncrement
 
     @property
-    def FullScale( self ):
-        try: nbrAdcBits = self.mrec.NbrAdcBits+1 if self.mrec.NbrAdcBits==12 else self.mrec.NbrAdcBits
-        except: nbrAdcBits = 8
-        return 2**nbrAdcBits * self.ActualAverages if self.mrec.mwfms[0][self.index].Samples.dtype==int32 else 1
+    def SampleType( self ):
+        return "Int32"
 
 
 class AccMultiRecord():

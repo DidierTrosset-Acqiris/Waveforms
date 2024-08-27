@@ -7,7 +7,7 @@ except:
 
 from subprocess import *
 
-from waveforms.trace import ReadTrace, FullScale
+from waveforms.trace import ReadTrace
 from threading import Thread
 from queue import Queue
 import socket
@@ -22,8 +22,9 @@ import warnings
 
 # Try to import SciPy, disables calculations if not
 try:
-    from scipy import arange, array, double, fft, log10, pi, polyfit, optimize, sin, sqrt
-    from numpy import maximum, minimum, linspace
+    from scipy import arange, array, double, log10, pi, polyfit, optimize, sin, sqrt
+    from scipy.fft import fft
+    from numpy import maximum, minimum, linspace, sin, pi
     USE_SCIPY = 1
 except ImportError:
     sys.stderr.write("Live Viewer requires scipy for better experience. See http://www.scipy.org/\n")
@@ -34,6 +35,20 @@ matplotlib.use('TkAgg')   # Plot to TkInter
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg as FigureCanvas
 from matplotlib.figure import Figure
 
+
+def VerticalScale( trace ):
+    if hasattr( trace, "ActualAverages" ):
+        return 2**trace.NbrAdcBits * trace.ActualAverages
+    if trace.SampleType=="Int32":
+        return 2**32
+    elif trace.SampleType=="Int16":
+        return 2**16
+    elif trace.SampleType=="Int8":
+        return 2**8
+    elif trace.SampleType=="Real64":
+        return 1.0
+    else:
+        raise RuntimeError( "ERROR: Unknown sample type "+str( trace.SampleType )+"." )
 
 def CalcFourier( record, nbrSamples ):
     record.spectrums = []
@@ -102,7 +117,7 @@ def CalcRatios(trace, nbrHarmonics=6):
     ratios.powSignal = float(first[1])**2.0
     ratios.binSecond = second[0]
     ratios.powSecond = float(second[1])**2.0
-    ratios.powFS = (trace.FullScale / 2) ** 2.0
+    ratios.powFS = (VerticalScale(trace) / 2) ** 2.0
     return ratios
 
 
@@ -127,7 +142,6 @@ class FittedSine:
         self.all = [ 1., 1., 0., 0., 0. ]
         self.adc = []
         self.XIncrement = 0
-        self.FullScale = 0
 
 
 def CalcZeroCross(samples):
@@ -217,7 +231,6 @@ def CalcFittedSine(trace):
     except:
         pass
     fittedSine.XIncrement = trace.XIncrement
-    fittedSine.FullScale = trace.FullScale
     return fittedSine
 
 
@@ -342,8 +355,6 @@ def GetTraceFromSource():
     if input:
         for rec in ReadTrace( input ):
             rec.filename = filename
-            if not hasattr(rec, 'FullScale'):
-                rec.FullScale = FullScale( rec.SampleType );
             yield rec
 #        if not TcpPort or TcpHost: # We are not listening
 #            Pause = True
@@ -361,7 +372,7 @@ def CalculateTrace(trace):
             trace.fittedSine = None
     # Calculate FFT
     trace.nbrFftSamples = trace.ActualPoints if trace.ActualPoints<65536 else 65536
-#    CalcFourier(trace, trace.nbrFftSamples)
+    #CalcFourier(trace, trace.nbrFftSamples)
     # Calculate ratios
     trace.ratios = None
     if ShowRatios:
@@ -431,7 +442,7 @@ def ShowImages(trace):
             tkHeader.itemconfigure("VCOUNT", text="%d" % (trace.ActualPoints))
         else:
             tkHeader.itemconfigure("VCOUNT", text="%d (%d for FFT)" % (trace.ActualPoints, trace.nbrFftSamples))
-            tkHeader.itemconfigure("VFULLSCALE", text="%d LSB" % (trace.FullScale))
+            tkHeader.itemconfigure("VFULLSCALE", text="%d LSB" % (VerticalScale(trace)))
             tkHeader.itemconfigure("VSAMPIVAL", text="%5.3g ns" % (trace.XIncrement * 1e9))
             tkHeader.itemconfigure("VNBRADC", text="")
     except:
@@ -522,15 +533,8 @@ def ShowImages(trace):
                     time = time + trace.InitialXOffset%trace.XIncrement * 1e6
                     linesSignals[ch], = plotSignal.plot(time, wfm.Samples, color=_GetColor(ch), marker=marker)
                     plotSignal.get_xaxis().axes.set_xlim(timeFirst, timeFull)
-                    try:
-                        yscale = 2**trace.NbrAdcBits * trace.ActualAverages
-                        ylim = ( 0, yscale )
-                    except:
-                        yscale = trace.FullScale
-                        if yscale>100: # Big: raw sample value; Small: voltage/phase
-                            ylim = (-yscale/2, yscale/2 - 1)
-                        else:
-                            ylim = (-yscale/2, yscale/2)
+                    yscale = VerticalScale( trace )
+                    ylim = (-yscale/2, yscale/2 - 1) if yscale>100 else (-yscale/2, yscale/2)
                     plotSignal.get_yaxis().axes.set_ylim(*ylim)
                     plotSignal.get_yaxis().axes.set_yticks([ylim[0]+n*yscale/8 for n in range(0, 8)] + [ylim[1]])
                 else:
@@ -543,7 +547,7 @@ def ShowImages(trace):
                     linesSignals[ch].set_ydata( wfm.Samples )
             tkSignal.draw()
         if ShowSpectrum:
-            spec = 20.0 * log10(trace.spectrums[0][0:trace.ActualPoints // 2 + 1] / (trace.FullScale / 2))
+            spec = 20.0 * log10(trace.spectrums[0][0:trace.ActualPoints // 2 + 1] / (VerticalScale(trace) / 2))
             if spectrumReset or not lineSpectrum or len(lineSpectrum.get_xdata()) != len(spec):
                 plotSpectrum.clear()
                 lineSpectrum = None
@@ -571,7 +575,7 @@ def ShowImages(trace):
     mismatch = Mismatch()
     if ShowFittedSine and trace.fittedSine:
         psine = trace.fittedSine.all
-        FullScale = max(1, trace.fittedSine.FullScale)
+        vscale = max(1, VerticalScale(trace.fittedSine))
         sampival = max(1e-12, trace.fittedSine.XIncrement)
         frequency = psine[OMEGA] / 2.0 / pi / sampival
         delay = psine[PHASE] / 2.0 / pi / frequency
@@ -581,7 +585,7 @@ def ShowImages(trace):
         tkUpdateLabel(tkFitted.children["allgain"], '%7.0f LSB' % (psine[GAIN]))
         tkUpdateLabel(tkFitted.children["alloffset"], '%7.2f LSB' % (psine[OFFSET]))
         tkUpdateLabel(tkFitted.children["allrms"], '%7.3f LSB' % (psine[RMS]))
-        try: vallenob = "%5.2f" % (math.log(FullScale / (sqrt(12) * psine[RMS] )) / math.log(2.0))
+        try: vallenob = "%5.2f" % (math.log(vscale / (sqrt(12) * psine[RMS] )) / math.log(2.0))
         except: vallenob = "#####"
         tkUpdateLabel(tkFitted.children["allenob"], '%s bits' % (vallenob))
         for adc in range(0, len(trace.fittedSine.adc)):
@@ -605,7 +609,7 @@ def ShowImages(trace):
             tkUpdateLabel(tkFitted.children["adc%dgain"%(adc)], '%7.0f LSB' % (psine[GAIN]))
             tkUpdateLabel(tkFitted.children["adc%doffset"%(adc)], '%7.2f LSB' % (psine[OFFSET]))
             tkUpdateLabel(tkFitted.children["adc%drms"%(adc)], '%7.3f LSB' % (psine[RMS]))
-            try: vadcenob = "%5.2f" % (math.log(FullScale / (sqrt(12) * psine[RMS] )) / math.log(2.0))
+            try: vadcenob = "%5.2f" % (math.log(vscale / (sqrt(12) * psine[RMS] )) / math.log(2.0))
             except: vadcenob = "#####"
             tkUpdateLabel(tkFitted.children["adc%denob"%(adc)], '%s bits' % (vadcenob))
             mismatch.adc.append(  ((delayAdc - delayAdc0) * 1e12, (psine[GAIN] - gainAdc0) / gainAdc0 * 100, (psine[OFFSET] - offsetAdc0) / gainAdc0 * 100)  )

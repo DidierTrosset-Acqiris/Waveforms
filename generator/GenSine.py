@@ -40,9 +40,8 @@ def main():
     trace = Trace()
     trace._Waves = [wave]
     trace.SampleType = "Int16"
-    trace.NbrAdcBits = 10
-    trace.FullScale = 65536
-    trace.Model = "GENERATOR"
+    trace.NbrAdcBits = args.bits
+    trace.Model = "SWGENERATOR"
     trace.XIncrement = 1.0 / args.sampling
     trace.InitialXOffset = 0.0
     trace.InitialXTimeSeconds = 0.0

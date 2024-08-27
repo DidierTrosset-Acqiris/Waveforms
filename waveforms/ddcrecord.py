@@ -202,10 +202,8 @@ class _DDCSubRecord:
         return self.mrec.mwfms[0].XIncrement
 
     @property
-    def FullScale( self ):
-        if self.view=='PHASE':
-            return 2*pi
-        return 2**32 if self.mrec.mwfms[0].SampleArray.dtype==int32 else 2**16 if self.mrec.mwfms[0].SampleArray.dtype==int16 else 2**8
+    def SampleType( self ):
+        return "Int32" if self.mrec.mwfms[0].SampleArray.dtype==int32 else "Int16" if self.mrec.mwfms[0].SampleArray.dtype==int16 else "Int8"
 
 
 class DDCMultiRecord():
@@ -302,8 +300,8 @@ class DDCMultiRecord():
         return self.mwfms[0].XIncrement
 
     @property
-    def FullScale( self ):
-        return self.mwfms[0].FullScale
+    def SampleType( self ):
+        return self.mwfms[0].SampleType
 
     @property
     def view( self ):

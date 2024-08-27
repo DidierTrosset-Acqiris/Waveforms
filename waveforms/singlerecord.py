@@ -111,8 +111,8 @@ class Record():
       -8403 -11933 -13571 -13213 -10755  -6573  -1427   4019   8701  12067
       13581  12979  10429   6195   1053  -4333  -9011 -12349 -13667 -12941
      -10179  -5757]
-    >>> print( r.FullScale )
-    65536
+    >>> print( r.SampleType )
+    Int16
     >>> print( r[0].ScaleFactor, r[0].ScaleOffset )
     6.103515625e-05 0.0
     >>> # Check that Record level checkXOffset is used if defined.
@@ -129,20 +129,19 @@ class Record():
                            -0.2, -0.1,  0.0,  0.1,  0.2,  0.3,  0.4,  0.3, \
                             0.2,  0.1,  0.0, -0.1, -0.2, -0.3, -0.4, -0.3 ], dtype=float64 )
     >>> fetch = ( samples, 30, 1, -7e-11, 0.0, 2e-3, 6.25e-10 )
-    >>> r = Record( fetch, FullScale=1.0 )
+    >>> r = Record( fetch )
     >>> len( r )
     1
     >>> print( r.ActualPoints, r.InitialXOffset, r.InitialXTimeSeconds, r.InitialXTimeFraction, r.XIncrement )
     30 -7e-11 0.0 0.002 6.25e-10
-    >>> print( r.FullScale )
-    1.0
+    >>> print( r.SampleType )
+    Real64
     >>> print( r[0].ScaleFactor, r[0].ScaleOffset )
     1.0 0.0
     """
-    def __init__( self, fetch=None, checkXOffset=True, nbrAdcBits=None, FullScale=None ):
+    def __init__( self, fetch=None, checkXOffset=True, nbrAdcBits=None ):
         self.NbrAdcBits = nbrAdcBits
         self.wfms = []
-        self._FullScale = FullScale
         self._checkXOffset = checkXOffset
         if fetch:
             self.append( fetch, checkXOffset )
@@ -198,12 +197,6 @@ class Record():
         elif self.wfms[0].SampleArray.dtype==int8:  return "Int8"
         elif self.wfms[0].SampleArray.dtype==float64: return "Real64"
         else: raise RuntimeError( "ERROR: Unknown sample type "+str( self.wfms[0].SampleArray.dtype )+"." )
-
-    @property
-    def FullScale( self ):
-        if self._FullScale:
-            return self._FullScale
-        return 2**32 if self.wfms[0].SampleArray.dtype==int32 else 2**16 if self.wfms[0].SampleArray.dtype==int16 else 2**8
 
 
 

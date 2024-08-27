@@ -22,7 +22,6 @@ class FittedSine:
         self.all = [ 1., 1., 0., 0., 0. ]
         self.adc = []
         self.XIncrement = 0
-        self.FullScale = 0
 
 
 def CalcZeroCross(samples):
@@ -112,7 +111,6 @@ def CalcFittedSine(trace):
     except:
         pass
     fittedSine.XIncrement = trace.XIncrement
-    fittedSine.FullScale = trace.FullScale
     return fittedSine
 
 
