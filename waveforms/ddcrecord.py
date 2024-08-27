@@ -207,10 +207,6 @@ class _DDCSubRecord:
             return 2*pi
         return 2**32 if self.mrec.mwfms[0].SampleArray.dtype==int32 else 2**16 if self.mrec.mwfms[0].SampleArray.dtype==int16 else 2**8
 
-    @property
-    def TraceType( self ):
-        return self.mrec.TraceType
-
 
 class DDCMultiRecord():
     """
@@ -261,7 +257,6 @@ class DDCMultiRecord():
     """
 
     def __init__( self, fetch=None, checkXOffset=True, nbrAdcBits=None ):
-        self.TraceType = "DDCRecord"
         self.NbrAdcBits = nbrAdcBits
         self._view = 'REAL'
         self.checkXOffset = checkXOffset
@@ -326,8 +321,7 @@ def ReadDDCRecords( f ):
     """ Read DDCRecord objects from a file
 
     >>> from io import StringIO
-    >>> trace = '''$TraceType DDCRecord
-    ... $SampleType Int16
+    >>> trace = '''$SampleType Int16
     ... $ActualChannels 2
     ... $Model U5303A
     ... $XIncrement 6.25e-10

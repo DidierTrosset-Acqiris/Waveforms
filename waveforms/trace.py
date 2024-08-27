@@ -127,9 +127,7 @@ class TraceHandler:
         self.is_valid = True
 
     def trcAttribute(self, strKey, strValue):
-        if strKey=='TraceType':
-            self.trace.TraceType = strValue
-        elif strKey=='SampleType':
+        if strKey=='SampleType':
             self.sampleType = strValue
             self.trace.SampleType = strValue
         elif strKey=='FULLSCALE':
@@ -270,8 +268,7 @@ def _test_ReadTrace( f ):
     define the text of the file content, but read it from an actual file!
 
     >>> from io import StringIO
-    >>> trace = '''$TraceType Digitizer
-    ... $ActualChannels 2
+    >>> trace = '''$ActualChannels 2
     ... $SampleType Int16
     ... $FullScale 65536
     ... $Model M9703B
@@ -335,8 +332,7 @@ def _test_ReadTrace( f ):
       -5742 -10242 -13118 -14034 -12734  -9378  -4670    846   6162  10542
       13250  13918  12482   8926   4258  -1202  -6542 -10818 -13406 -13938
      -12366  -8770]
-    >>> trace = '''$TraceType Digitizer
-    ... $ActualChannels 2
+    >>> trace = '''$ActualChannels 2
     ... $SampleType Int16
     ... $FullScale 65536
     ... $XIncrement 6.25e-10
@@ -350,7 +346,6 @@ def _test_ReadTrace( f ):
     ... 10973 12850  
     ... 6947  9598   
     ...
-    ... $TraceType Digitizer
     ... $ActualChannels 2
     ... $SampleType Int16
     ... $FullScale 65536
@@ -365,7 +360,6 @@ def _test_ReadTrace( f ):
     ... -10755 -12734
     ... -6573 -9378  
     ...
-    ... $TraceType Digitizer
     ... $ActualChannels 2
     ... $SampleType Int16
     ... $FullScale 65536
@@ -380,7 +374,6 @@ def _test_ReadTrace( f ):
     ... 10429 12482  
     ... 6195  8926   
     ...
-    ... $TraceType Digitizer
     ... $ActualChannels 2
     ... $SampleType Int16
     ... $FullScale 65536
@@ -445,7 +438,6 @@ def _test_OutputTrace( records, file ):
     >>> o = StringIO()
     >>> OutputTrace( r, file=o, Model="U5303A" )
     >>> print( o.getvalue() )
-    $TraceType Digitizer
     $SampleType Int16
     $FullScale 65536
     $ActualChannels 2
@@ -494,7 +486,6 @@ def _test_OutputTrace( records, file ):
     >>> o = StringIO()
     >>> OutputTrace( r, file=o, Model="U5303A", NbrSamples=8 )
     >>> print( o.getvalue() )
-    $TraceType Digitizer
     $SampleType Int16
     $FullScale 65536
     $Model U5303A
@@ -537,9 +528,8 @@ def OutputTrace( trace, file, Model=None, NbrSamples=None, FirstSample=None ):
     sampleType = getattr( trace, 'SampleType', SampleType( trace[0].Samples.dtype ) )
     try: sampleType = getattr( trace, 'SampleType', SampleType( trace[0].Samples.dtype ) )
     except: sampleType = getattr( trace, 'SampleType', SampleType( trace.Samples.dtype ) )
-    if hasattr( trace, 'TraceType' ): print( "$TraceType", trace.TraceType, file=file )
     print( "$SampleType", sampleType, file=file )
-    if hasattr( trace, 'NbrAdcBits' ) and trace.NbrAdcBits: print( "$NbrAdcBits", 13 if trace.NbrAdcBits==12 and trace.TraceType=="Accumulated" else trace.NbrAdcBits, file=file )
+    if hasattr( trace, 'NbrAdcBits' ) and trace.NbrAdcBits: print( "$NbrAdcBits", 13 if trace.NbrAdcBits==12 and hasattr( trace, "ActualAverages") else trace.NbrAdcBits, file=file )
     if hasattr( trace, 'FullScale' ) and trace.FullScale: print( "$FullScale", trace.FullScale, file=file )
     if Model: print( "$Model", Model, file=file )
     print( "$XIncrement", trace.XIncrement, file=file )
@@ -566,7 +556,6 @@ def OutputTrace( trace, file, Model=None, NbrSamples=None, FirstSample=None ):
         if a.startswith( 'ScaleOffset' ): continue
         if a.startswith( 'ScaleFactor' ): continue
         if a.startswith( 'XIncrement' ): continue
-        if a.startswith( 'TraceType' ): continue
         if a.startswith( 'RecordSize' ): continue
         if a.startswith( 'ActualRecords' ): continue
         if a.startswith( 'InitialXOffset' ): continue

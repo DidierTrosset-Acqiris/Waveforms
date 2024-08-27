@@ -133,7 +133,6 @@ class _AccSubRecord:
     def __init__( self, mrec, index ):
         if index<0 or index>=len( mrec ):
             raise IndexError( "index out of bounds" )
-        self.TraceType = "Accumulated"
         self.mrec = mrec
         self.index = index
 
@@ -235,7 +234,6 @@ class AccMultiRecord():
     """
 
     def __init__( self, fetch=None, checkXOffset=True, nbrAdcBits=None ):
-        self.TraceType = "Accumulated"
         self.checkXOffset = checkXOffset
         self.NbrAdcBits = nbrAdcBits
         self.mwfms = []
@@ -290,8 +288,7 @@ def _test_ReadAccRecords( f ):
     """ Read AccRecord objects from a file
     
     >>> from io import StringIO
-    >>> trace = '''$TraceType Accumulated
-    ... $SampleType Int32
+    >>> trace = '''$SampleType Int32
     ... $ActualChannels 2
     ... $ActualAverages 256
     ... $Model U5309A

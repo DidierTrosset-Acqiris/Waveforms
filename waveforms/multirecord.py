@@ -163,10 +163,6 @@ class _SubRecord:
     def FullScale( self ):
         return self.mrec.FullScale
 
-    @property
-    def TraceType( self ):
-        return self.mrec.TraceType
-
 
 class MultiRecord():
     """
@@ -213,7 +209,6 @@ class MultiRecord():
     """
 
     def __init__( self, fetch=None, checkXOffset=True, nbrAdcBits=None ):
-        self.TraceType = "Digitizer"
         self.NbrAdcBits = nbrAdcBits
         self.mwfms = []
         self.checkXOffset = checkXOffset

@@ -484,7 +484,6 @@ def Acquire( vis, args, queue, loop ):
 class StreamWaveform( object ):
     def __init__( self, elmt, bits, dt, args ):
         self.SampleType = "Int16"
-        self.TraceType = "Digitizer"
         self.NbrAdcBits = 16
         self.ActualRecords = 1
         self.RecordSize = args.output_samples
@@ -526,7 +525,6 @@ class StreamWaveform( object ):
 class StreamRecord( object ):
     def __init__( self, args ):
         self.SampleType = "Int16"
-        self.TraceType = "Digitizer"
         self.NbrAdcBits = 16
         self.ActualRecords = 1
         self.RecordSize = args.output_samples

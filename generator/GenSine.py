@@ -39,7 +39,6 @@ def main():
 
     trace = Trace()
     trace._Waves = [wave]
-    trace.TraceType = "Digitizer"
     trace.SampleType = "Int16"
     trace.NbrAdcBits = 10
     trace.FullScale = 65536

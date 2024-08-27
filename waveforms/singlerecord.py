@@ -192,10 +192,6 @@ class Record():
         return self.wfms[0].XIncrement
 
     @property
-    def TraceType( self ):
-        return "Digitizer"
-
-    @property
     def SampleType( self ):
         if   self.wfms[0].SampleArray.dtype==int32: return "Int32"
         elif self.wfms[0].SampleArray.dtype==int16: return "Int16"
