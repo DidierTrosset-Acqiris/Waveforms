@@ -3,7 +3,7 @@
 """
     Runs continuous acquisitions
 
-    Copyright (C) Acqiris SA 2017-2023
+    Copyright (C) Acqiris SA 2017-2024
    
     Started: September 27th, 2017
     By:      Didier Trosset
@@ -86,6 +86,8 @@ def Initialize( args, initopts ):
                 PrintCoreVersion( vi, "Core AdcInt: ", AGMD2_VAL_LOGIC_DEVICE_CORE_ADC_INTERFACE )
                 PrintCoreVersion( vi, "Core StrPr:  ", AGMD2_VAL_LOGIC_DEVICE_CORE_STREAM_PREPARE )
                 PrintCoreVersion( vi, "Core TrgMgr: ", AGMD2_VAL_LOGIC_DEVICE_CORE_TRIGGER_MANAGER )
+
+            #vi.Private.PrivateCalibration.PrivateCalibrationSteps["Trim"].Characterize( "Characterize-Trim-OnInit.txt" )
 
     #except:
     #    for vi in vis:
@@ -227,8 +229,8 @@ def ApplyArgs( vis, args ):
 
         vi.Trigger.ActiveSource = ActiveTrigger
 
-#        if args.trigger_output_enabled!=None:
-#            vi.Trigger.OutputEnabled = args.trigger_output_enabled
+        if args.trigger_output_enabled!=None:
+            vi.Trigger.OutputEnabled = args.trigger_output_enabled
         if args.trigger_output_source!=None:
             vi.Trigger.Output.Source = args.trigger_output_source
         if args.trigger_output_offset!=None:
@@ -257,11 +259,18 @@ def ApplyArgs( vis, args ):
                 ch.Filter.MaxFrequency = args.input_max_frequency
             if args.bypass_anti_aliasing is not None:
                 ch.Filter.BypassAntiAliasing = args.bypass_anti_aliasing
+            if args.no_bypass_moving_average is not None:
+                ch.Filter.BypassMovingAverage = not args.no_bypass_moving_average
             #ch.BaselineCorrection.Mode = 1
             if args.data_inversion:
                 ch.DataInversionEnabled = True
         #vi.Channels["Channel1"].Filter.BypassAntiAliasing = True
         #vi.Channels["Channel2"].Filter.BypassAntiAliasing = True
+
+        if args.channel_sampling_delay_1:
+            vi.Channels['Channel1'].SamplingDelay = args.channel_sampling_delay_1
+        if args.channel_sampling_delay_2:
+            vi.Channels['Channel2'].SamplingDelay = args.channel_sampling_delay_2
 
         if args.calibration_signal!=None:
             vi.Private.PrivateCalibration.UserSignal = "Signal"+args.calibration_signal

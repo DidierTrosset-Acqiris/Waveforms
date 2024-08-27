@@ -62,7 +62,7 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--trigger-delay", "-td",       nargs=None, type=float, default=None )
         self.add_argument( "--trigger-slope", "-ts",                   type=str,   default=None, choices=["positive", "p", "negative", "n"] )
         self.add_argument( "--immediate-trigger", "-it",                           default=False, action='store_true' )
-        self.add_argument( "--trigger-output-enabled", "-toe",                     default=False, action='store_true' )
+        self.add_argument( "--trigger-output-enabled", "-toe",                     default=None,  action='store_true' )
         self.add_argument( "--trigger-output-source", "-tos",          type=str,   default=None )
         self.add_argument( "--trigger-output-offset", "-too", nargs=None, type=float, default=None )
 
@@ -89,6 +89,9 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--output-samples", "-os",      nargs=None, type=int,   default=None )
         self.add_argument( "--output-info", "-oi",                                 default=False, action='store_true' )
 
+        self.add_argument( "--channel-sampling-delay-1", "-csd1",      type=float, default=None )
+        self.add_argument( "--channel-sampling-delay-2", "-csd2",      type=float, default=None )
+
         self.add_argument( "--disable-channel1", "-dc1",                           default=False, action='store_true' )
         self.add_argument( "--disable-channel2", "-dc2",                           default=False, action='store_true' )
         self.add_argument( "--vertical-range", "-vr",                  type=float, default=None )
@@ -96,6 +99,7 @@ class DigitizerParser( ArgumentParser ):
 
         self.add_argument( "--input-max-frequency", "-imf",            type=float, default=None )
         self.add_argument( "--bypass-anti-aliasing", "-baa",                       default=None, action='store_true' )
+        self.add_argument( "--no-bypass-moving-average", "-nobma",                 default=None, action='store_true' )
 
         self.add_argument( "--calibration-signal", "-cs",              type=str  , default=None, choices=['Gnd', 'T0', 'High', 'Low', 'Square', 'Cal100', '100MHz', 'InterleavingDelay', 'AcPhase', 'SelfTrigger'] )
 
