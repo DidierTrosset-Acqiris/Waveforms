@@ -317,7 +317,7 @@ def _test_ReadTrace( f ):
     ...        print( wfm.ScaleFactor, wfm.ScaleOffset )
     ...        print( wfm._Samples )
     2
-    2 32 -7.93457e-11 0.0 0.002 6.25e-10
+    32 -7.93457e-11 0.0 0.002 6.25e-10
     1.52587890625e-05 0.0
     [ -2243   3171   8093  11667  13533  13203  10973   6947   1869  -3485
       -8403 -11933 -13571 -13213 -10755  -6573  -1427   4019   8701  12067
@@ -387,19 +387,19 @@ def _test_ReadTrace( f ):
     ...    for wfm in trc:
     ...        print( wfm._Samples )
     2
-    2 8 -7.93456e-11 6.25e-10
+    8 -7.93456e-11 6.25e-10
     [-2243  3171  8093 11667 13533 13203 10973  6947]
     [-5486   -18  5394  9902 12962 13966 12850  9598]
     2
-    2 8 -7.93457e-11 6.25e-10
+    8 -7.93457e-11 6.25e-10
     [  1869  -3485  -8403 -11933 -13571 -13213 -10755  -6573]
     [  5074   -370  -5742 -10242 -13118 -14034 -12734  -9378]
     2
-    2 8 -7.93458e-11 6.25e-10
+    8 -7.93458e-11 6.25e-10
     [-1427  4019  8701 12067 13581 12979 10429  6195]
     [-4670   846  6162 10542 13250 13918 12482  8926]
     2
-    2 8 -7.93459e-11 6.25e-10
+    8 -7.93459e-11 6.25e-10
     [  1053  -4333  -9011 -12349 -13667 -12941 -10179  -5757]
     [  4258  -1202  -6542 -10818 -13406 -13938 -12366  -8770]
     """
@@ -436,7 +436,7 @@ def _test_OutputTrace( records, file ):
     $XIncrement 6.25e-10
     $InitialXOffset -7e-11
     $InitialXTimeSeconds 0.0
-    $InitialXTimeFraction 0.002
+    $InitialXTimeFraction 0.002000000
     $$ScaleFactor 0 6.103515625e-05
     $$ScaleOffset 0 0.0
     $$ScaleFactor 1 3.0517578125e-05
@@ -483,7 +483,7 @@ def _test_OutputTrace( records, file ):
     $XIncrement 6.25e-10
     $InitialXOffset -7e-11
     $InitialXTimeSeconds 0.0
-    $InitialXTimeFraction 0.002
+    $InitialXTimeFraction 0.002000000
     $$ScaleFactor 0 6.103515625e-05
     $$ScaleOffset 0 0.0
     $$ScaleFactor 1 3.0517578125e-05
@@ -529,9 +529,9 @@ def OutputTrace( trace, file, Model=None, NbrSamples=None, FirstSample=None ):
 
     try: nbrChannels = len( trace )
     except: nbrChannels = 1
-#    for index, wave in enumerate( trace ):
-#        if hasattr( wave, 'ScaleFactor' ): print( "$$ScaleFactor", index, wave.ScaleFactor, file=file )
-#        if hasattr( wave, 'ScaleOffset' ): print( "$$ScaleOffset", index, wave.ScaleOffset, file=file )
+    for index, wave in enumerate( trace ):
+        if hasattr( wave, 'ScaleFactor' ): print( "$$ScaleFactor", index, wave.ScaleFactor, file=file )
+        if hasattr( wave, 'ScaleOffset' ): print( "$$ScaleOffset", index, wave.ScaleOffset, file=file )
     try: print( "$ActualAverages", trace.ActualAverages, file=file )
     except: pass
     for a in dir(trace):
