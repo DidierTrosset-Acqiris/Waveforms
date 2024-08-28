@@ -47,7 +47,11 @@ def main():
     trace.InitialXTimeSeconds = 0.0
     trace.InitialXTimeFraction = 0.0
 
-    OutputTrace( trace, file=stdout )
+    try:
+        OutputTrace( trace, file=stdout )
+    except BrokenPipeError:
+        pass
+
 
 if __name__=="__main__":
     main()
