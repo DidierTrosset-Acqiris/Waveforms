@@ -17,6 +17,7 @@ def main():
     parser.add_argument( "--cores", "-c",     type=int,   default=1 )
     parser.add_argument( "--width", "-w",     type=int,   default=16 )
     parser.add_argument( "--length", "-l",    type=int,   default=1000 )
+    parser.add_argument( "--records", "-r",   type=int,   default=1 )
     parser.add_argument( "--delays", "-p", nargs="*", type=float, default=[0.0])
 
     args = parser.parse_args()
@@ -24,33 +25,40 @@ def main():
 
     waveform = np.zeros( args.length, dtype=np.int16 )
 
-    for n in range( args.length ):
-        t = n / args.sampling
-        p = args.delays[n % args.cores]
-        w = 2 * np.pi * args.freq * ( t + p )
-        v = args.offset + args.amplitude * sin( w )
-        s = int( v ) * 2**( args.width - args.bits )
-        waveform[n] = s
+    record = 0
+    while True:
 
-    wave = Trace.Wave()
-    wave._Samples = waveform
-    wave.ScaleFactor = 2.0/65536
-    wave.ScaleOffset = 0.0
+        for n in range( args.length ):
+            t = n / args.sampling
+            p = args.delays[n % args.cores]
+            w = 2 * np.pi * args.freq * ( t + p )
+            v = args.offset + args.amplitude * sin( w )
+            s = int( v ) * 2**( args.width - args.bits )
+            waveform[n] = s
 
-    trace = Trace()
-    trace._Waves = [wave]
-    trace.SampleType = "Int16"
-    trace.NbrAdcBits = args.bits
-    trace.Model = "SWGENERATOR"
-    trace.XIncrement = 1.0 / args.sampling
-    trace.InitialXOffset = 0.0
-    trace.InitialXTimeSeconds = 0.0
-    trace.InitialXTimeFraction = 0.0
+        wave = Trace.Wave()
+        wave._Samples = waveform
+        wave.ScaleFactor = 2.0/65536
+        wave.ScaleOffset = 0.0
 
-    try:
-        OutputTrace( trace, file=stdout )
-    except BrokenPipeError:
-        pass
+        trace = Trace()
+        trace._Waves = [wave]
+        trace.SampleType = "Int16"
+        trace.NbrAdcBits = args.bits
+        trace.Model = "SWGENERATOR"
+        trace.XIncrement = 1.0 / args.sampling
+        trace.InitialXOffset = 0.0
+        trace.InitialXTimeSeconds = 0.0
+        trace.InitialXTimeFraction = 0.0
+
+        try:
+            OutputTrace( trace, file=stdout )
+        except BrokenPipeError:
+            break
+
+        record += 1
+        if args.records > 0 and record >= args.records:
+            break
 
 
 if __name__=="__main__":
