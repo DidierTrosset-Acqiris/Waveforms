@@ -262,14 +262,20 @@ def ApplyArgs( vis, args ):
             if args.no_bypass_moving_average is not None:
                 ch.Filter.BypassMovingAverage = not args.no_bypass_moving_average
             #ch.BaselineCorrection.Mode = 1
-            if args.data_inversion:
-                ch.DataInversionEnabled = True
+            if args.data_inversion is not None:
+                if args.data_inversion_channels is not None:
+                    if int( ch.Name[7:] ) in args.data_inversion_channels:
+                        ch.DataInversionEnabled = args.data_inversion
+                else:
+                    ch.DataInversionEnabled = args.data_inversion
         #vi.Channels["Channel1"].Filter.BypassAntiAliasing = True
         #vi.Channels["Channel2"].Filter.BypassAntiAliasing = True
 
-        if args.channel_sampling_delay_1:
+        if args.inter_channel_delay_enabled is not None:
+            vi.Calibration.InterChannelDelayEnabled = args.inter_channel_delay_enabled
+        if args.channel_sampling_delay_1 is not None:
             vi.Channels['Channel1'].SamplingDelay = args.channel_sampling_delay_1
-        if args.channel_sampling_delay_2:
+        if args.channel_sampling_delay_2 is not None:
             vi.Channels['Channel2'].SamplingDelay = args.channel_sampling_delay_2
 
         if args.calibration_signal!=None:
@@ -676,6 +682,7 @@ def FetchChannels( vis, args ):
                     channel = vi.Channels["Channel%d"%ch]
                     try:
                         wfms = channel.MultiRecordMeasurement.FetchMultiRecordWaveform( 0, args.read_records, 0, args.read_samples, dtype=args.read_type)
+                        #print( channel.Name, "InitialXOffset:", wfms[0].InitialXOffset*1e12, "ps, samples:", *wfms[0].Samples[0:8], file=stderr )
                     except RuntimeError:
                         canReadAgain = True
                         try: vi.Acquisition.ErrorOnOverrangeEnabled = False

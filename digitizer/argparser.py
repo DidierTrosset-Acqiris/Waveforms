@@ -37,6 +37,8 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--calibrate-once", "-co",                              default=False, action='store_true' )
         self.add_argument( "--calibrate-fails", "-cf",                             default=False, action='store_true' )
         self.add_argument( "--cal-offset-target", "-cot",              type=float )
+        self.add_argument( "--dump-cal-waveforms", "-dcw", nargs='+',  type=str )
+        self.add_argument( "--disable-cal-steps", "-dcs",  nargs='+',  type=str )
 
         grps = self.add_mutually_exclusive_group()
         grps.add_argument( "--clock-internal", "-ki",                              default=False, action='store_true' )
@@ -89,6 +91,7 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--output-samples", "-os",      nargs=None, type=int,   default=None )
         self.add_argument( "--output-info", "-oi",                                 default=False, action='store_true' )
 
+        self.add_argument( "--inter-channel-delay-enabled", "-icde",               default=None, action='store_true' )
         self.add_argument( "--channel-sampling-delay-1", "-csd1",      type=float, default=None )
         self.add_argument( "--channel-sampling-delay-2", "-csd2",      type=float, default=None )
 
@@ -116,6 +119,13 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--control-io2", "-io2",                    type=str,   default=None )
         self.add_argument( "--control-io3", "-io3",                    type=str,   default=None )
 
+        self.add_argument( "--analog-output-level-1", "-aol1",         type=float, default=None )
+        self.add_argument( "--analog-output-range-1", "-aor1",         type=float, default=None )
+        self.add_argument( "--analog-output-output-1", "-aoo1",        type=int,   default=None )
+        self.add_argument( "--analog-output-level-2", "-aol2",         type=float, default=None )
+        self.add_argument( "--analog-output-range-2", "-aor2",         type=float, default=None )
+        self.add_argument( "--analog-output-output-2", "-aoo2",        type=int,   default=None )
+
         self.add_argument( "--ddc-decimation-numerator", "-ddn",       type=int )
         self.add_argument( "--ddc-decimation-denominator", "-ddd",     type=int )
         self.add_argument( "--ddc-local-oscillator-frequency", "-ddf", type=float, default=0.0 )
@@ -124,6 +134,7 @@ class DigitizerParser( ArgumentParser ):
         self.add_argument( "--no-check-x-offset", "-ncxo",                         default=False, action='store_true' )
 
         self.add_argument( "--data-inversion", "-di",                              default=False, action='store_true' )
+        self.add_argument( "--data-inversion-channels", "-dic", nargs='*', type=int, default=None )
 
         self.add_argument( "--equalization", "-eq",                    type=str,   default=None,  choices=['Smooth', 'Sharp', 'NoEq', 'Custom'] )
 

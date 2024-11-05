@@ -162,9 +162,9 @@ def ApplyArgs( vis, args ):
         if args.tsr:
             print( "TSR Not supported", file=stderr )
 
-        # Manages acquisition mode DDC
-        if args.mode=='DDC':
-            print( "DDC Not supported", file=stderr )
+        # Manages acquisition mode
+        if args.mode and args.mode != 'DGT':
+            print( "Mode", args.mode, "not supported", file=stderr )
 
         # Manages conbination
         if args.interleave:
@@ -174,13 +174,6 @@ def ApplyArgs( vis, args ):
             for ch in vi.Channels:
                 ch.TimeInterleavedChannelList = ""
         args.sampling_frequency = vi.Acquisition.SampleRate # Get SampleRate from instrument as it may have been changed by the interleaving
-
-        # Manages acquisition mode AVG
-        if args.mode=='AVG':
-            vi.Acquisition.Mode = AcquisitionMode.Averager
-            vi.Acquisition.NumberOfAverages = args.averages
-        elif args.mode=='DGT':
-            vi.Acquisition.Mode = AcquisitionMode.Normal
 
         # Manages streaming
         if args.streaming_continuous or args.streaming_triggered:
@@ -259,7 +252,7 @@ def ApplyArgs( vis, args ):
             vi.Channels['Channel2'].SamplingDelay = args.channel_sampling_delay_2
 
         if args.calibration_signal!=None:
-            vi.Private.PrivateCalibration.UserSignal = "Signal"+args.calibration_signal
+            vi.Calibration.UserSignal = args.calibration_signal
 
         if args.equalization:
             vi.Calibration.Equalization = CalibrationEqualization.SharpRollOff if args.equalization=="Sharp" else \
@@ -300,17 +293,11 @@ def ApplyArgs( vis, args ):
                                        else TimeResetMode.OnFirstTrigger  if args.timestamp_reset == "OnFirstTrigger"  \
                                        else TimeResetMode.Immediate
 
-#        for ch in [0, 1, 2, 3, 4, 5, 23, 24, 25, 26, 30, 31]:
-#            vi.Channels[ch].Enabled = False 
-
         # Manages the calibration offset target
         if args.cal_offset_target!=None:
             vi.Calibration.TargetVoltageEnabled = True
             for ch in vi.Channels:
                 ch.CalibrationTargetVoltage = args.cal_offset_target
-
-        if args.mode=='CFW':
-            vi.Acquisition.Mode = AcquisitionMode.UserFDK
 
         if args.no_digital_gain:
             vi.Private.PrivateCalibration.SetCalibrationValueBoolean( "DigitalGain:Disable", True )
@@ -324,21 +311,28 @@ def ApplyArgs( vis, args ):
         #vi.Private.PrivateCalibration.SetCalibrationValueBoolean( "SampleAveraging:Disable", True )
         #vi.Private.PrivateCalibration.SetCalibrationValueInt32( "SampleAveraging:ReadChannel", 1 )
 
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["OffsetPrecal"].DumpWaveforms = True
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["DC"].DumpWaveforms = True
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["AC"].DumpWaveforms = True
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["StreamAlign"].DumpWaveforms = True
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["T0"].DumpWaveforms = True
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["DC"].Enabled = False
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["StreamAlign"].Enabled = False
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["PhaseMismatch"].Enabled = False
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["GainOffsetMismatch"].Enabled = False
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["AC"].Enabled = False
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["T0"].Enabled = False
+        if args.dump_cal_waveforms:
+            for step in args.dump_cal_waveforms:
+                vi.Calibration.Steps[step].DumpWaveforms = True
+        if args.disable_cal_steps:
+            for step in args.disable_cal_steps:
+                vi.Calibration.Steps[step].Enabled = False
 
-        #vi.Private.PrivateCalibration.PrivateCalibrationSteps["DC"].DumpWaveforms = True
+        if args.analog_output_range_1:
+            vi.ControlIOs['AnalogOut1'].Analog.Range = args.analog_output_range_1
+        if args.analog_output_level_1:
+            vi.ControlIOs['AnalogOut1'].Analog.Level = args.analog_output_level_1
+        if args.analog_output_range_2:
+            vi.ControlIOs['AnalogOut2'].Analog.Range = args.analog_output_range_2
+        if args.analog_output_level_2:
+            vi.ControlIOs['AnalogOut2'].Analog.Level = args.analog_output_level_2
 
         vi.Acquisition.ApplySetup()
+
+        if args.analog_output_output_1:
+            vi.ControlIOs['AnalogOut1'].Analog.WriteOutput( args.analog_output_output_1 )
+        if args.analog_output_output_2:
+            vi.ControlIOs['AnalogOut2'].Analog.WriteOutput( args.analog_output_output_2 )
 
         global lastFirmwareRevision
         newFirmwareRevision = vi.Identity.InstrumentFirmwareRevision
@@ -392,7 +386,7 @@ def Acquire( vis, args, queue, loop ):
         vi.Acquisition.Initiate()
         if args.trigger_name=="SelfTrigger":
             sleep( 0.200 )
-            vi.Trigger.Sources["SelfTrigger"].SelfTrigger.InitiateGeneration()
+            vi.LowLevelAccess.SelfTrigger.InitiateGeneration()
 
     while True:
         # Manages wait/poll
@@ -503,7 +497,7 @@ def FetchChannels( vis, args ):
                     channel = vi.Channels["Channel%d"%ch]
                     wfm = channel.Measurement.FetchWaveform( dtype=args.read_type )
                     wfms.append( wfm )
-        except RuntimeError:
+        except RuntimeError as e:
             raise
         try:
             OutputWaveforms( wfms, stdout, NbrSamples=args.output_samples )
