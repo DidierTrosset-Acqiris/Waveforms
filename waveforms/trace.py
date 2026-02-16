@@ -66,6 +66,7 @@ def SampleType( dataType ):
         raise RuntimeError( "ERROR: Unknown sample type "+str( dataType )+"." )
 
 def DataType( sampleType ):
+    sampleType = str( sampleType ).strip()
     if sampleType=="Int32":
         return int32
     elif sampleType=="Int16":
@@ -75,7 +76,16 @@ def DataType( sampleType ):
     elif sampleType=="Real64":
         return float64
     else:
-        raise RuntimeError( "ERROR: Unknown sample type "+str( SampleType )+"." )
+        normalized = sampleType.lower()
+        if normalized in ( "int32", "i32" ):
+            return int32
+        elif normalized in ( "int16", "i16" ):
+            return int16
+        elif normalized in ( "int8", "i8" ):
+            return int8
+        elif normalized in ( "real64", "float64", "f64", "double" ):
+            return float64
+        raise RuntimeError( "ERROR: Unknown sample type "+str( sampleType )+"." )
 
 
 class TraceHandler:
@@ -102,6 +112,14 @@ class TraceHandler:
         self.stype = int
         self.dtype = int16
 
+    @staticmethod
+    def _parse_float(value):
+        return float(str(value).replace(",", ""))
+
+    @staticmethod
+    def _parse_int(value):
+        return int(float(str(value).replace(",", "")))
+
     def trcEnd(self, cont):
         if self._size==0 or not self._Waves or self._index==0:
             return
@@ -114,31 +132,33 @@ class TraceHandler:
         self.is_valid = True
 
     def trcAttribute(self, strKey, strValue):
+        strKey = strKey.strip()
+        strValue = strValue.strip()
         if strKey=='SampleType':
             self.sampleType = strValue
             self.trace.SampleType = strValue
         elif strKey=='Model':
             self.trace.Model = strValue
         elif strKey=='SINEFREQ' or strKey=='SineFreq':
-            self.trace.SineFreq = float( strValue )
+            self.trace.SineFreq = self._parse_float( strValue )
         elif strKey=='Counter':
-            self.trace.counter = int( strValue )
+            self.trace.counter = self._parse_int( strValue )
         elif strKey=='#ADCS':
             pass
         elif strKey=='NbrAdcBits':
-            self.trace.NbrAdcBits = int(strValue)
+            self.trace.NbrAdcBits = self._parse_int( strValue )
         elif strKey=='SAMPIVAL' or strKey=='XIncrement':
-            self.trace.XIncrement = float( strValue )
+            self.trace.XIncrement = self._parse_float( strValue )
         elif strKey=='ActualAverages':
-            self.trace.ActualAverages = int( strValue )
+            self.trace.ActualAverages = self._parse_int( strValue )
         elif strKey=='HORPOS':
-            self.trace.InitialXOffset = float( strValue )
+            self.trace.InitialXOffset = self._parse_float( strValue )
         elif strKey=='InitialXOffset':
-            self.trace.InitialXOffset = float( strValue )
+            self.trace.InitialXOffset = self._parse_float( strValue )
         elif strKey=='InitialTimeSeconds':
-            self.trace.InitialXTimeSeconds = float( strValue )
+            self.trace.InitialXTimeSeconds = self._parse_float( strValue )
         elif strKey=='InitialTimeFraction':
-            self.trace.InitialXTimeFraction = float( strValue )
+            self.trace.InitialXTimeFraction = self._parse_float( strValue )
         else:
             try:
                 setattr( self.trace, strKey, strValue )
@@ -150,9 +170,9 @@ class TraceHandler:
         while len( self.trace._Waves )<=index:
             self.trace._Waves.append( Trace.Wave() )
         if strKey=='ScaleFactor':
-            self.trace._Waves[index].ScaleFactor = float( strValue )
+            self.trace._Waves[index].ScaleFactor = self._parse_float( strValue )
         elif strKey=='ScaleOffset':
-            self.trace._Waves[index].ScaleOffset = float( strValue )
+            self.trace._Waves[index].ScaleOffset = self._parse_float( strValue )
         else:
             try:
                 setattr( self.trace._Waves[index], strKey, strValue )
@@ -178,18 +198,27 @@ class TraceHandler:
             self._Waves[i].resize( self._size )
 
     def trcSamples(self, strLine):
-        values = strLine.split()
+        line = strLine.split( '#', 1 )[0].strip()
+        if not line:
+            return
+        values = line.replace( ',', ' ' ).replace( ';', ' ' ).split()
+        if not values:
+            return
         if not self._Waves:
             self._initWaves( getattr( self, "sampleType", "Int8" ), len( values ) )
+        elif len( values )!=self._chans:
+            if len( values )<self._chans:
+                values.extend( [ '0' ]*( self._chans-len( values ) ) )
+            else:
+                values = values[:self._chans]
         if self._index>=self._size:
             self._resizeWaves()
-        try:
-            for record, value in enumerate( values ):
+        for record, value in enumerate( values ):
+            try:
                 self._Waves[record][self._index] = self._stype( value )
-        except:
-            raise
-        finally:
-            self._index = self._index+1
+            except ValueError:
+                self._Waves[record][self._index] = self._stype( float( str(value).replace( ',', '' ) ) )
+        self._index = self._index+1
 
 
 
@@ -207,30 +236,41 @@ def ParseTrace( input, handler ):
         else:
             line = input.readline()
 
+        if isinstance( line, bytes ):
+            line = line.decode( errors='replace' )
+
         # Handles EOF
         if line=="":
             EOF = True
             break
 
         # Handles end of record with start of new one
-        if line[0]=="$" and isInSamples:
+        if line and line[0]=="$" and isInSamples:
             handler.SetKeepLine( line )
             EOF = False
             break
 
         # Handles empty lines
         line = line.strip()
-        if line=="" or line[0]==FS:
+        if line=="":
+            continue
+        if line[0]==FS or line.startswith( "#" ):
             continue
 
         # Interpret the line
-        if line[0]=="$" and line[1]=="$":
+        if line[0]=="$" and len( line )>1 and line[1]=="$":
             line = line[2:]
-            key, index, value = line.split( None, maxsplit=2 )
+            fields = line.split( None, maxsplit=2 )
+            if len( fields )<3:
+                continue
+            key, index, value = fields
             handler.trcWaveAttribute( int( index ), key, value )
         elif line[0]=="$":
             line = line[1:]
-            key, value = line.split( None, maxsplit=1 )
+            fields = line.split( None, maxsplit=1 )
+            if len( fields )<2:
+                continue
+            key, value = fields
             handler.trcAttribute( key, value )
         else:
             isInSamples = True
@@ -555,4 +595,3 @@ def OutputTrace( trace, file, Model=None, NbrSamples=None, FirstSample=None ):
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
-
