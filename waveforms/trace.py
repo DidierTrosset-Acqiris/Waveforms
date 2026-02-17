@@ -11,7 +11,7 @@ import collections
 This is how to use the Trace module. Of course, effective use will not
 define the text of the file content, but read it from an actual file!
 
-record = Record( AgMD2_FetchWaveformViInt16( Vi, ... ) )
+record = Record( FetchWaveform( Vi, ... ) )
 OutputTrace( record, file=sys.stdout )
 
 for rec in ReadTrace( sys.stdin ):
